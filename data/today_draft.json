@@ -341,28 +341,19 @@
           "name": "AI-powered SEO/marketing platform",
           "tasks": [
             {
-              "raw": "Merge all changes of Social module to main and deploy on vercel => Done",
-              "text": "Merge all changes of Social module to main and deploy on vercel",
+              "text": "Explore and understand Google ads api  : In-progress",
               "status": "Done"
             },
             {
-              "raw": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows => Done",
-              "text": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows",
+              "text": "Implement and test Google and Meta ads oauth connection",
               "status": "Done"
             },
             {
-              "raw": "Understand how google ads works => Done",
-              "text": "Understand how google ads works",
+              "text": "Resolve Google Ads API Access Issues and Account Authorization Errors",
               "status": "Done"
             },
             {
-              "raw": "Plan entire Architecture and list all features of ad module => Done",
-              "text": "Plan entire Architecture and list all features of ad module",
-              "status": "Done"
-            },
-            {
-              "raw": "Explore and understand Google ads api => Done",
-              "text": "Explore and understand Google ads api",
+              "text": "Build Initial Google & Meta Ads Manager Functionality : In-progress",
               "status": "Done"
             }
           ]

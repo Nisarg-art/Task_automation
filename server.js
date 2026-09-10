@@ -10,30 +10,50 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const DATA_DIR = path.join(__dirname, 'data');
+const os = require('os');
+
+// On Vercel, the app root (/var/task) is read-only; use os.tmpdir() (/tmp)
+const isVercel = Boolean(process.env.VERCEL);
+const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'task_automation_data') : path.join(__dirname, 'data');
 const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DRAFT_FILE = path.join(DATA_DIR, 'today_draft.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(HISTORY_FILE)) {
-  fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
-}
-if (!fs.existsSync(CONFIG_FILE)) {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ 
-    webhookUrl: '', 
-    reminderTime: '18:28',
-    autoDispatch: true 
-  }));
-}
-if (!fs.existsSync(DRAFT_FILE)) {
-  fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: '', teamData: [] }));
-}
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
 
-const os = require('os');
+  // If on Vercel, copy initial config/draft from package if exists
+  const localDataDir = path.join(__dirname, 'data');
+  if (isVercel && fs.existsSync(localDataDir)) {
+    try {
+      if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(path.join(localDataDir, 'config.json'))) {
+        fs.copyFileSync(path.join(localDataDir, 'config.json'), CONFIG_FILE);
+      }
+      if (!fs.existsSync(DRAFT_FILE) && fs.existsSync(path.join(localDataDir, 'today_draft.json'))) {
+        fs.copyFileSync(path.join(localDataDir, 'today_draft.json'), DRAFT_FILE);
+      }
+    } catch (e) {}
+  }
+
+  if (!fs.existsSync(HISTORY_FILE)) {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
+  }
+  if (!fs.existsSync(CONFIG_FILE)) {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ 
+      webhookUrl: '', 
+      reminderTime: '18:28',
+      autoDispatch: true 
+    }));
+  }
+  if (!fs.existsSync(DRAFT_FILE)) {
+    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: '', teamData: [] }));
+  }
+} catch (err) {
+  console.error('Error initializing data directory:', err.message);
+}
 
 function getLocalIp() {
   const interfaces = os.networkInterfaces();
