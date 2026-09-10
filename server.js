@@ -354,8 +354,37 @@ async function checkAndAutoDispatch() {
 
 setInterval(checkAndAutoDispatch, 30000); // Check every 30 seconds
 
+// Vercel Cron Endpoint for 6:28 PM auto-dispatch
+app.get('/api/cron-dispatch', async (req, res) => {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    if (!config.webhookUrl) {
+      return res.status(400).json({ success: false, error: 'Webhook URL not configured' });
+    }
+    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+    if (!draft.teamData || draft.teamData.length === 0) {
+      return res.json({ success: true, message: 'No tasks to dispatch today.' });
+    }
+
+    const text = buildFormattedOutput(draft);
+    const response = await fetch(config.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ text }),
+    });
+
+    if (response.ok) {
+      return res.json({ success: true, message: 'Dispatched successfully via Vercel Cron!' });
+    } else {
+      return res.status(500).json({ success: false, error: await response.text() });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // -----------------------------------------------------------------------------
-// Start Server
+// Start Server (Only listen if run directly, not in serverless)
 // -----------------------------------------------------------------------------
 function startServer(port = 3050) {
   const server = app.listen(port, '0.0.0.0', () => {
@@ -377,4 +406,8 @@ function startServer(port = 3050) {
   });
 }
 
-startServer(process.env.PORT ? parseInt(process.env.PORT) : 3050);
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  startServer(process.env.PORT ? parseInt(process.env.PORT) : 3050);
+}
+
+module.exports = app;
