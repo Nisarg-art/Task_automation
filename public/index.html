@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrum Master Daily Task Automator | Real-Time Aggregator & Dispatcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-mode">
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="app-title">Scrum Daily Task Automator</h1>
+          <p class="app-subtitle">1-on-1 Chat Aggregator & Google Chat Dispatcher</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Reminder Badge -->
+        <div class="reminder-badge" id="reminderBadge" title="Click to adjust dispatch reminder time">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Dispatch Time: <strong id="displayReminderTime">6:28 PM</strong></span>
+        </div>
+
+        <!-- Date Selector -->
+        <div class="date-picker-wrap">
+          <label for="reportDate">Report Date:</label>
+          <input type="text" id="reportDate" class="input-field" placeholder="DD/MM/YYYY">
+        </div>
+
+        <!-- Copy Team Portal Link -->
+        <button id="btnCopyTeamLink" class="btn btn-secondary" title="Copy shareable link for team members">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          Share Submit Link
+        </button>
+
+        <!-- Webhook Config Button -->
+        <button id="btnOpenSettings" class="btn btn-secondary" title="Configure Google Chat Webhook">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <span id="webhookBadge" class="status-indicator-dot dot-gray"></span>
+          Webhook
+        </button>
+
+        <!-- Copy Formatted Text -->
+        <button id="btnCopyFormat" class="btn btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          Copy Text
+        </button>
+
+        <!-- Send to Google Chat -->
+        <button id="btnSendChat" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          Send to Sir's Group
+        </button>
+      </div>
+    </header>
+
+    <!-- Scheduled Reminder Banner (Shows when nearing 6:28 PM) -->
+    <div id="reminderBanner" class="reminder-banner hidden">
+      <div class="reminder-banner-content">
+        <span class="bell-icon">🔔</span>
+        <div>
+          <strong>Time for Daily Status Dispatch! (6:28 PM)</strong>
+          <p>Please do a quick 10-second review of the preview on the right, then hit <strong>"Send to Sir's Group"</strong>.</p>
+        </div>
+      </div>
+      <button id="btnDismissBanner" class="btn btn-xs btn-outline">Dismiss</button>
+    </div>
+
+    <!-- Team Checklist Tracker -->
+    <section class="team-tracker-bar">
+      <div class="tracker-header">
+        <span class="tracker-title">Team Daily Updates Checklist:</span>
+        <span class="tracker-count" id="trackerCount">0 / 10 Received</span>
+      </div>
+      <div class="roster-pills" id="rosterPills">
+        <!-- Member status pills render dynamically here -->
+      </div>
+    </section>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <span class="stat-label">Total Members</span>
+        <span id="statMembers" class="stat-val">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Projects</span>
+        <span id="statProjects" class="stat-val">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Completed Tasks</span>
+        <span id="statDone" class="stat-val text-green">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">In Progress / WIP</span>
+        <span id="statWIP" class="stat-val text-orange">0</span>
+      </div>
+      <div class="stat-card webhook-status-card">
+        <span class="stat-label">Google Chat Target</span>
+        <span id="statWebhook" class="stat-val text-sm">Not Configured</span>
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <!-- Left Panel: Ingestion & Builder -->
+      <section class="panel left-panel">
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+          <button class="tab-btn active" data-tab="single-drop-tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            ⚡ Quick 1-on-1 Chat Drop
+          </button>
+          <button class="tab-btn" data-tab="bulk-tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+            📋 Bulk Paste All Updates
+          </button>
+          <button class="tab-btn" data-tab="builder-tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            👥 Visual Team Editor
+          </button>
+          <button class="tab-btn" data-tab="history-tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            🕒 History Logs
+          </button>
+        </div>
+
+        <!-- Tab 1: Single 1-on-1 Chat Drop (Live Aggregator) -->
+        <div id="single-drop-tab" class="tab-content active">
+          <div class="parser-header">
+            <div>
+              <h3>Drop Individual 1-on-1 Chat Update</h3>
+              <p class="section-desc">As each developer/designer sends you their message in personal chat during the day, paste it here. It will automatically merge into today's master report without overwriting others!</p>
+            </div>
+            <div class="quick-examples">
+              <button id="btnQuickHarshad" class="btn btn-xs btn-outline">Test Sample Update</button>
+            </div>
+          </div>
+
+          <div class="single-drop-box">
+            <div class="member-selector-row">
+              <label for="quickMemberSelect">Target Member (Optional / Auto-Detect):</label>
+              <select id="quickMemberSelect" class="input-field select-field">
+                <option value="AUTO">✨ Auto-Detect from Text</option>
+                <option value="HARSHAD">HARSHAD</option>
+                <option value="KIRAN">KIRAN</option>
+                <option value="DHRUV">DHRUV</option>
+                <option value="PRANAV">PRANAV</option>
+                <option value="KARTIK">KARTIK</option>
+                <option value="DEVERSH">DEVERSH (Nodejs Developer)</option>
+                <option value="RADHEY">RADHEY (Nodejs Developer)</option>
+                <option value="AJAY">AJAY (Designer)</option>
+                <option value="HASTI">HASTI (Designer)</option>
+                <option value="NISARG">NISARG (QA & Scrum Master)</option>
+              </select>
+            </div>
+
+            <textarea id="singleChatInput" class="raw-textarea single-textarea" placeholder="Paste the message you received from a developer/designer... e.g.:
+
+HARSHAD:- RankMyTrip:-
+Tabbar UI => Done
+Add Vehicle Screen UI => Done
+Drive History G-Force Distribution Screen UI => WIP"></textarea>
+
+            <div class="drop-footer">
+              <button id="btnMergeSingle" class="btn btn-primary btn-large">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Merge Update into Today's Master Report
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Bulk Parser Content -->
+        <div id="bulk-tab" class="tab-content">
+          <div class="parser-header">
+            <div>
+              <h3>Paste All Tasks at Once</h3>
+              <p class="section-desc">If you have all updates together, paste the full text block here to replace/populate today's master status.</p>
+            </div>
+            <div class="quick-examples">
+              <button id="btnLoadSample" class="btn btn-xs btn-outline">Load 09/09 Sample</button>
+              <button id="btnClearInput" class="btn btn-xs btn-outline">Clear</button>
+            </div>
+          </div>
+
+          <textarea id="rawTextInput" class="raw-textarea" placeholder="Paste all tasks here..."></textarea>
+
+          <div class="parser-footer">
+            <button id="btnParseRaw" class="btn btn-primary btn-large">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+              ✨ Parse & Replace Master Report
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab 3: Interactive Builder Content -->
+        <div id="builder-tab" class="tab-content">
+          <div class="builder-toolbar">
+            <div class="builder-actions-left">
+              <button id="btnAddMember" class="btn btn-sm btn-outline">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Add Member
+              </button>
+              <button id="btnPreloadTeam" class="btn btn-sm btn-outline">Reset to Full Roster</button>
+            </div>
+            <button id="btnClearAll" class="btn btn-sm btn-ghost text-red">Clear Today's Report</button>
+          </div>
+
+          <div id="membersContainer" class="members-container">
+            <!-- Dynamic Member Cards Render Here -->
+          </div>
+        </div>
+
+        <!-- Tab 4: History & Logs -->
+        <div id="history-tab" class="tab-content">
+          <div class="history-header">
+            <h3>Dispatched Status Logs</h3>
+            <p class="section-desc">View past reports and carry over unresolved WIP tasks.</p>
+          </div>
+          <div id="historyList" class="history-list">
+            <div class="empty-state">No past reports saved yet. Send your first report to see history!</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: Live Google Chat Formatted Preview -->
+      <section class="panel right-panel">
+        <div class="preview-header">
+          <div class="preview-title-group">
+            <div class="google-chat-badge">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+              Google Chat Live Preview
+            </div>
+            <span class="preview-mode-tag">Ready for Quick Check</span>
+          </div>
+
+          <div class="preview-actions">
+            <button id="btnQuickCheckDone" class="btn btn-xs btn-primary">⚡ 1-Click Send</button>
+          </div>
+        </div>
+
+        <!-- Live Google Chat Bubble Preview -->
+        <div class="preview-body">
+          <div id="chatMessageBubble" class="chat-bubble">
+            <div class="chat-bubble-header">
+              <div class="bot-avatar">🤖</div>
+              <div class="bot-info">
+                <span class="bot-name">Scrum Master Bot (Nisarg)</span>
+                <span class="bot-time" id="previewTimestamp">Today</span>
+              </div>
+            </div>
+            <div class="chat-bubble-content">
+              <pre id="formattedOutputText" class="formatted-pre"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings / Webhook & Reminder Modal -->
+  <div id="settingsModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          </div>
+          <div>
+            <h3>Settings & Automation Config</h3>
+            <p class="modal-subtitle">Configure Google Chat Webhook and Daily Reminder Time.</p>
+          </div>
+        </div>
+        <button id="btnCloseSettings" class="btn-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="webhookUrlInput">Google Chat Incoming Webhook URL</label>
+          <input type="text" id="webhookUrlInput" class="input-field" placeholder="https://chat.googleapis.com/v1/spaces/XXXX/messages?key=YYYY&token=ZZZZ">
+          <small class="form-help">
+            In your Google Chat Space ➔ Click Space Name ➔ <em>Apps & Integrations</em> ➔ <em>Manage Webhooks</em> ➔ Add Webhook & paste URL here.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="reminderTimeInput">Daily Dispatch Reminder Time (24h format)</label>
+          <input type="time" id="reminderTimeInput" class="input-field" value="18:28">
+          <small class="form-help">
+            The dashboard will alert you at <strong>6:28 PM</strong> (or your set time) to review the live draft and click send.
+          </small>
+        </div>
+
+        <div class="webhook-test-results hidden" id="webhookTestResult"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btnTestWebhook" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          Test Webhook
+        </button>
+        <button id="btnSaveWebhook" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast hidden">
+    <div class="toast-content">
+      <span id="toastIcon" class="toast-icon">✓</span>
+      <span id="toastMessage" class="toast-msg">Operation completed successfully</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

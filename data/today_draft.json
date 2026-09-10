@@ -1,0 +1,461 @@
+{
+  "date": "10/09/2026",
+  "teamData": [
+    {
+      "name": "HARSHAD",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "RankMyTrip",
+          "tasks": [
+            {
+              "text": "Tabbar UI",
+              "status": "Done"
+            },
+            {
+              "text": "Add Vehicle Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History G-Force Distribution Screen UI",
+              "status": "WIP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KIRAN",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "FirstText App",
+          "tasks": [
+            {
+              "text": "Fix bugs (3)",
+              "status": "Done"
+            },
+            {
+              "text": "Change image issue",
+              "status": "Done"
+            }
+          ]
+        },
+        {
+          "name": "Second Number App",
+          "tasks": [
+            {
+              "text": "Fix bugs (4)",
+              "status": "Done"
+            },
+            {
+              "text": "Upload new build",
+              "status": "Done"
+            }
+          ]
+        },
+        {
+          "name": "Sweet Santa App",
+          "tasks": [
+            {
+              "text": "Add premium flow",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SECOND NUMBER APP",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Fix bugs (4) => Done",
+              "text": "Fix bugs (4)",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SWEET SANTA APP",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Add premium flow => Done",
+              "text": "Add premium flow",
+              "status": "Done"
+            },
+            {
+              "raw": "Add new build => Done",
+              "text": "Add new build",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "THE CRYSTAL WISH APP",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Project setup => Done",
+              "text": "Project setup",
+              "status": "Done"
+            },
+            {
+              "raw": "Estimate sheet => Done",
+              "text": "Estimate sheet",
+              "status": "Done"
+            },
+            {
+              "raw": "Add task in freedcamp => Done",
+              "text": "Add task in freedcamp",
+              "status": "Done"
+            },
+            {
+              "raw": "Splash screen => Done",
+              "text": "Splash screen",
+              "status": "Done"
+            },
+            {
+              "raw": "No internet screen => Done",
+              "text": "No internet screen",
+              "status": "Done"
+            },
+            {
+              "raw": "Add packages => Done",
+              "text": "Add packages",
+              "status": "Done"
+            },
+            {
+              "raw": "Onboarding first => Done",
+              "text": "Onboarding first",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DHRUV",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "Crystal Wish app",
+          "tasks": [
+            {
+              "text": "research on Semantic Search",
+              "status": "Done"
+            },
+            {
+              "text": "script for add data",
+              "status": "Done"
+            },
+            {
+              "text": "generate audio api",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PRANAV",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "Happy Reward's Dashboard Application",
+          "tasks": [
+            {
+              "raw": "Project:  Happy Reward's Clover Application ( => Done",
+              "text": "Project:  Happy Reward's Clover Application (",
+              "status": "Done"
+            },
+            {
+              "raw": "1. Development Progress => Done",
+              "text": "1. Development Progress",
+              "status": "Done"
+            },
+            {
+              "raw": "Spearheaded the Clover version 27 production rollout preparation, ensuring all deployment configurations and operational requirements were aligned for a stable release ! => Done",
+              "text": "Spearheaded the Clover version 27 production rollout preparation, ensuring all deployment configurations and operational requirements were aligned for a stable release !",
+              "status": "Done"
+            },
+            {
+              "raw": "2. Metting => Done",
+              "text": "2. Metting",
+              "status": "Done"
+            },
+            {
+              "raw": "Engaged in a productive discussion with Samkit Bhai and Nisarg Bhai regarding Happy Reward's Clover Application ( 45 Min ) ! => Done",
+              "text": "Engaged in a productive discussion with Samkit Bhai and Nisarg Bhai regarding Happy Reward's Clover Application ( 45 Min ) !",
+              "status": "Done"
+            },
+            {
+              "raw": "Project:  Happy Reward's Dashboard Application ( => Done",
+              "text": "Project:  Happy Reward's Dashboard Application (",
+              "status": "Done"
+            },
+            {
+              "raw": "1. Development Progress => Done",
+              "text": "1. Development Progress",
+              "status": "Done"
+            },
+            {
+              "raw": "Orchestrated the production rollout of the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) on a PM2 server, validating build integrity, uptime reliability, and deployment readiness. ! => Done",
+              "text": "Orchestrated the production rollout of the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) on a PM2 server, validating build integrity, uptime reliability, and deployment readiness. !",
+              "status": "Done"
+            },
+            {
+              "raw": "Executed the Production deployment for the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) ensuring seamless release management and production availability. => Done",
+              "text": "Executed the Production deployment for the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) ensuring seamless release management and production availability.",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KARTIK",
+      "role": "",
+      "note": "ON HALF DAY",
+      "projects": [
+        {
+          "name": "Happy Reward Shopify",
+          "tasks": [
+            {
+              "raw": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension => Done",
+              "text": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension",
+              "status": "Done"
+            },
+            {
+              "raw": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality => Done",
+              "text": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "HAMILTON DABBAWALA",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Investigated and verified the issue where Membership visits were not being deducted properly => Done",
+              "text": "Investigated and verified the issue where Membership visits were not being deducted properly",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "VIP CANNABIS",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Added and configured background synchronization scripts on the server to sync all Orders and Products automatically => Done",
+              "text": "Added and configured background synchronization scripts on the server to sync all Orders and Products automatically",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DEVERSH",
+      "role": "Nodejs Developer",
+      "note": "",
+      "projects": [
+        {
+          "name": "SEC EDGAR Terminal",
+          "tasks": [
+            {
+              "raw": "Update TradeDetailModal styles and improve accessibility => Done",
+              "text": "Update TradeDetailModal styles and improve accessibility",
+              "status": "Done"
+            },
+            {
+              "raw": "Update ingestion status timestamps and remove unused section from LandingPage => Done",
+              "text": "Update ingestion status timestamps and remove unused section from LandingPage",
+              "status": "Done"
+            },
+            {
+              "raw": "Simplify active watchlist handling and clean up unused code in WatchlistManagementView => Done",
+              "text": "Simplify active watchlist handling and clean up unused code in WatchlistManagementView",
+              "status": "Done"
+            },
+            {
+              "raw": "Implement robust Stripe webhook handling and plan synchronization logic => Done",
+              "text": "Implement robust Stripe webhook handling and plan synchronization logic",
+              "status": "Done"
+            },
+            {
+              "raw": "PlanGuard logic to support free tier and refine billing access test cases => Done",
+              "text": "PlanGuard logic to support free tier and refine billing access test cases",
+              "status": "Done"
+            },
+            {
+              "raw": "Subscription cancellation endpoint, improve trial status logic, and allow deletion of final watchlist => Done",
+              "text": "Subscription cancellation endpoint, improve trial status logic, and allow deletion of final watchlist",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RADHEY",
+      "role": "Nodejs Developer",
+      "note": "",
+      "projects": [
+        {
+          "name": "AI-powered SEO/marketing platform",
+          "tasks": [
+            {
+              "raw": "Merge all changes of Social module to main and deploy on vercel => Done",
+              "text": "Merge all changes of Social module to main and deploy on vercel",
+              "status": "Done"
+            },
+            {
+              "raw": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows => Done",
+              "text": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows",
+              "status": "Done"
+            },
+            {
+              "raw": "Understand how google ads works => Done",
+              "text": "Understand how google ads works",
+              "status": "Done"
+            },
+            {
+              "raw": "Plan entire Architecture and list all features of ad module => Done",
+              "text": "Plan entire Architecture and list all features of ad module",
+              "status": "Done"
+            },
+            {
+              "raw": "Explore and understand Google ads api => Done",
+              "text": "Explore and understand Google ads api",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AJAY",
+      "role": "Designer",
+      "note": "",
+      "projects": [
+        {
+          "name": "TEST",
+          "tasks": [
+            {
+              "text": "DO REGRESSION TESTING",
+              "status": "Done"
+            },
+            {
+              "text": "UNDERSTAND THE FLOW",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "HASTI",
+      "role": "Designer",
+      "note": "",
+      "projects": [
+        {
+          "name": "Extra Task",
+          "tasks": [
+            {
+              "text": "AI Onboarding Screen",
+              "status": "Done"
+            },
+            {
+              "text": "AI Models for Figma",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EXTRA TASK",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "raw": "Exploring Figma Agent => Done",
+              "text": "Exploring Figma Agent",
+              "status": "Done"
+            },
+            {
+              "raw": "AI Models for Design => Done",
+              "text": "AI Models for Design",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NISARG",
+      "role": "QA & Scrum Master",
+      "note": "",
+      "projects": [
+        {
+          "name": "TEST",
+          "tasks": [
+            {
+              "text": "TEST",
+              "status": "Done"
+            }
+          ]
+        },
+        {
+          "name": "TEST1",
+          "tasks": [
+            {
+              "text": "TEST2",
+              "status": "Done"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "lastUpdated": "2026-09-10T11:37:58.837Z"
+}
