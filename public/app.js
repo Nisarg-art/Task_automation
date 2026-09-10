@@ -790,12 +790,22 @@ function renderBuilder() {
       saveTodayDraft();
     });
 
-    const noteInput = document.createElement('input');
-    noteInput.type = 'text';
-    noteInput.className = 'input-field input-role';
-    noteInput.placeholder = 'Note (e.g. ON HALF DAY)';
-    noteInput.value = member.note || '';
-    noteInput.addEventListener('input', (e) => {
+    const noteSelect = document.createElement('select');
+    noteSelect.className = 'input-field input-role';
+    const noteOptions = [
+      { label: 'Full Day', val: '' },
+      { label: 'ON HALF DAY', val: 'ON HALF DAY' },
+      { label: 'ON LEAVE', val: 'ON LEAVE' },
+      { label: 'WORK FROM HOME', val: 'WORK FROM HOME' }
+    ];
+    noteOptions.forEach(opt => {
+      const optEl = document.createElement('option');
+      optEl.value = opt.val;
+      optEl.textContent = opt.label;
+      if ((member.note || '').toUpperCase() === opt.val) optEl.selected = true;
+      noteSelect.appendChild(optEl);
+    });
+    noteSelect.addEventListener('change', (e) => {
       member.note = e.target.value;
       generateFormattedOutput();
       saveTodayDraft();
@@ -803,7 +813,7 @@ function renderBuilder() {
 
     infoInputs.appendChild(nameInput);
     infoInputs.appendChild(roleInput);
-    infoInputs.appendChild(noteInput);
+    infoInputs.appendChild(noteSelect);
 
     const btnDeleteMember = document.createElement('button');
     btnDeleteMember.className = 'btn btn-xs btn-ghost text-red';

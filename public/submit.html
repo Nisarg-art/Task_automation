@@ -200,8 +200,13 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
         </div>
 
         <div>
-          <label class="form-label" for="noteInput">Status / Attendance Note (Optional)</label>
-          <input type="text" id="noteInput" class="form-control" placeholder="e.g. ON HALF DAY (Leave blank if full day)">
+          <label class="form-label" for="noteSelect">Status / Attendance Note (Optional)</label>
+          <select id="noteSelect" class="form-control">
+            <option value="">Full Day (Default)</option>
+            <option value="ON HALF DAY">ON HALF DAY</option>
+            <option value="ON LEAVE">ON LEAVE</option>
+            <option value="WORK FROM HOME">WORK FROM HOME</option>
+          </select>
         </div>
 
         <button type="submit" id="btnSubmitStatus" class="btn btn-primary btn-large" style="margin-top: 8px;">
@@ -253,7 +258,7 @@ Upload new build => Done" required></textarea>
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const member = document.getElementById('memberNameSelect').value;
-      const note = document.getElementById('noteInput').value.trim();
+      const note = document.getElementById('noteSelect').value.trim();
 
       // Collect all projects
       const projectBlocks = document.querySelectorAll('.project-card-block');
