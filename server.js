@@ -82,13 +82,23 @@ app.get('/api/info', (req, res) => {
   });
 });
 
-// Helper: Format Date DD/MM/YYYY
+// Helper: Format Date DD/MM/YYYY in Asia/Kolkata / Local timezone
 function getFormattedToday() {
   const now = new Date();
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const year = now.getFullYear();
-  return `${day}/${month}/${year}`;
+  try {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    return formatter.format(now);
+  } catch (e) {
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
 }
 
 // Send Message to Google Chat via Webhook

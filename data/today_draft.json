@@ -1,5 +1,5 @@
 {
-  "date": "10/09/2026",
+  "date": "11/09/2026",
   "teamData": [
     {
       "name": "HARSHAD",
@@ -183,51 +183,22 @@
       "note": "",
       "projects": [
         {
-          "name": "Happy Reward's Dashboard Application",
+          "name": "HP",
           "tasks": [
             {
-              "raw": "Project:  Happy Reward's Clover Application ( => Done",
-              "text": "Project:  Happy Reward's Clover Application (",
-              "status": "Done"
-            },
-            {
-              "raw": "1. Development Progress => Done",
               "text": "1. Development Progress",
               "status": "Done"
             },
             {
-              "raw": "Spearheaded the Clover version 27 production rollout preparation, ensuring all deployment configurations and operational requirements were aligned for a stable release ! => Done",
-              "text": "Spearheaded the Clover version 27 production rollout preparation, ensuring all deployment configurations and operational requirements were aligned for a stable release !",
+              "text": "Actively developing the Happy Rewards application for Ingenico AXIUM payment terminals, implementing SDK integrations, payment workflows, device capabilities, and security architecture !",
               "status": "Done"
             },
             {
-              "raw": "2. Metting => Done",
-              "text": "2. Metting",
+              "text": "2. Metting :",
               "status": "Done"
             },
             {
-              "raw": "Engaged in a productive discussion with Samkit Bhai and Nisarg Bhai regarding Happy Reward's Clover Application ( 45 Min ) ! => Done",
-              "text": "Engaged in a productive discussion with Samkit Bhai and Nisarg Bhai regarding Happy Reward's Clover Application ( 45 Min ) !",
-              "status": "Done"
-            },
-            {
-              "raw": "Project:  Happy Reward's Dashboard Application ( => Done",
-              "text": "Project:  Happy Reward's Dashboard Application (",
-              "status": "Done"
-            },
-            {
-              "raw": "1. Development Progress => Done",
-              "text": "1. Development Progress",
-              "status": "Done"
-            },
-            {
-              "raw": "Orchestrated the production rollout of the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) on a PM2 server, validating build integrity, uptime reliability, and deployment readiness. ! => Done",
-              "text": "Orchestrated the production rollout of the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) on a PM2 server, validating build integrity, uptime reliability, and deployment readiness. !",
-              "status": "Done"
-            },
-            {
-              "raw": "Executed the Production deployment for the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) ensuring seamless release management and production availability. => Done",
-              "text": "Executed the Production deployment for the Happy Rewards Dashboard ( https://clv.happyrewards.io/ ) ensuring seamless release management and production availability.",
+              "text": "Engaged in a productive discussion with Samkit Bhai regarding Happy Reward's Clover Application ( 30 Min ) !",
               "status": "Done"
             }
           ]

@@ -115,6 +115,24 @@ Do regression testing on PrivateLine second number app => Done
 Do UI testing on FirstText app and raised a bug in freedcamp => Done
 Discussed the issues I faced in the GLP-1 Tracker app with Dhruv => Done`;
 
+// Helper: Format Date DD/MM/YYYY
+function getFormattedToday() {
+  const now = new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    return formatter.format(now);
+  } catch (e) {
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+}
+
 // App State
 let state = {
   date: getFormattedToday(),
@@ -123,15 +141,6 @@ let state = {
   teamData: [],
   history: []
 };
-
-// Helper: Format Date DD/MM/YYYY
-function getFormattedToday() {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const year = now.getFullYear();
-  return `${day}/${month}/${year}`;
-}
 
 // DOM Elements
 const reportDateInput = document.getElementById('reportDate');
@@ -1143,6 +1152,13 @@ async function loadTodayDraft(isAutoPoll = false) {
 
         lastDraftHash = currentHash;
         state.teamData = data.draft.teamData;
+        if (data.draft.date) {
+          state.date = data.draft.date;
+          if (reportDateInput) reportDateInput.value = state.date;
+        } else {
+          state.date = getFormattedToday();
+          if (reportDateInput) reportDateInput.value = state.date;
+        }
 
         // If user isn't actively typing in builder, re-render builder
         if (!isUserTyping) {
@@ -1152,6 +1168,8 @@ async function loadTodayDraft(isAutoPoll = false) {
         renderChecklistTracker();
       }
     } else if (!isAutoPoll) {
+      state.date = getFormattedToday();
+      if (reportDateInput) reportDateInput.value = state.date;
       state.teamData = parseRawTasks(SAMPLE_09_09_TEXT);
       renderBuilder();
       generateFormattedOutput();
