@@ -122,17 +122,21 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
             ⚡ Quick 1-on-1 Chat Drop
           </button>
+          <button class="tab-btn" data-tab="filter-tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            📅 Calendar & Member Filter
+          </button>
           <button class="tab-btn" data-tab="bulk-tab">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
-            📋 Bulk Paste All Updates
+            📋 Bulk Paste
           </button>
           <button class="tab-btn" data-tab="builder-tab">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-            👥 Visual Team Editor
+            👥 Visual Editor
           </button>
           <button class="tab-btn" data-tab="history-tab">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            🕒 History Logs
+            🕒 Dispatched Logs
           </button>
         </div>
 
@@ -182,7 +186,121 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           </div>
         </div>
 
-        <!-- Tab 2: Bulk Parser Content -->
+        <!-- Tab 2: Calendar & Member Filter (Daily, Weekly, Monthly & User Dropdown) -->
+        <div id="filter-tab" class="tab-content">
+          <div class="filter-header-section">
+            <div class="filter-header-title">
+              <h3>📅 Calendar & Member Task History</h3>
+              <p class="section-desc">Filter tasks submitted by any team member across <strong>Daily</strong>, <strong>Weekly</strong>, or <strong>Monthly</strong> dates.</p>
+            </div>
+            <div class="filter-actions-top">
+              <button id="btnCopyFilteredSummary" class="btn btn-xs btn-secondary" title="Copy filtered status in Google Chat format">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Copy Summary
+              </button>
+              <button id="btnLoadFilteredToMaster" class="btn btn-xs btn-outline" title="Load these filtered tasks into the Live Master draft">
+                ⚡ Load to Today's Master
+              </button>
+            </div>
+          </div>
+
+          <!-- Comprehensive Filter Bar -->
+          <div class="history-filter-card">
+            <!-- Period Selector Tabs -->
+            <div class="filter-control-row">
+              <div class="filter-field-group">
+                <label class="filter-label">Timeframe Period:</label>
+                <div class="period-toggle-group" id="periodToggleGroup">
+                  <button type="button" class="period-pill active" data-period="daily">📅 Daily</button>
+                  <button type="button" class="period-pill" data-period="weekly">🗓️ Weekly (7 Days)</button>
+                  <button type="button" class="period-pill" data-period="monthly">📆 Monthly (30 Days)</button>
+                  <button type="button" class="period-pill" data-period="all">♾️ All Time</button>
+                </div>
+              </div>
+
+              <!-- Quick Date Helpers -->
+              <div class="quick-date-chips">
+                <button type="button" class="chip-btn" id="btnDateToday">Today</button>
+                <button type="button" class="chip-btn" id="btnDateYesterday">Yesterday</button>
+              </div>
+            </div>
+
+            <!-- Inputs Row: Calendar Date, User Dropdown, Search -->
+            <div class="filter-inputs-grid">
+              <!-- Calendar Date Picker -->
+              <div class="filter-input-col">
+                <label for="historyDatePicker" class="filter-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                  Select Date (Calendar):
+                </label>
+                <input type="date" id="historyDatePicker" class="input-field date-calendar-input">
+              </div>
+
+              <!-- User's Name Dropdown -->
+              <div class="filter-input-col">
+                <label for="historyMemberSelect" class="filter-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  Filter by Member:
+                </label>
+                <select id="historyMemberSelect" class="input-field select-field">
+                  <option value="ALL">👥 All Team Members</option>
+                  <option value="HARSHAD">HARSHAD</option>
+                  <option value="KIRAN">KIRAN</option>
+                  <option value="DHRUV">DHRUV</option>
+                  <option value="PRANAV">PRANAV</option>
+                  <option value="KARTIK">KARTIK</option>
+                  <option value="DEVERSH">DEVERSH (Nodejs Developer)</option>
+                  <option value="RADHEY">RADHEY (Nodejs Developer)</option>
+                  <option value="AJAY">AJAY (Designer)</option>
+                  <option value="HASTI">HASTI (Designer)</option>
+                  <option value="NISARG">NISARG (QA & Scrum Master)</option>
+                </select>
+              </div>
+
+              <!-- Keyword Search -->
+              <div class="filter-input-col">
+                <label for="historySearchInput" class="filter-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Search Keyword / Project:
+                </label>
+                <input type="text" id="historySearchInput" class="input-field" placeholder="e.g. RankMyTrip, bug, UI...">
+              </div>
+            </div>
+
+            <!-- Filter Trigger & Reset Bar -->
+            <div class="filter-submit-bar">
+              <button id="btnApplyFilter" class="btn btn-primary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Apply Filter
+              </button>
+              <button id="btnResetFilter" class="btn btn-secondary">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Reset All
+              </button>
+            </div>
+          </div>
+
+          <!-- Filter Summary Ribbon & Mini Metrics -->
+          <div class="filter-summary-ribbon" id="filterSummaryRibbon">
+            <div class="summary-info">
+              <span class="summary-tag-icon">🔍</span>
+              <span id="filterSummaryText">Showing: <strong>Daily Status (Today)</strong> for <strong>All Members</strong></span>
+            </div>
+            <div class="filter-stats-pills">
+              <span class="f-pill"><strong id="fStatSubmissions">0</strong> Submissions</span>
+              <span class="f-pill"><strong id="fStatMembers">0</strong> Members</span>
+              <span class="f-pill text-green"><strong id="fStatDone">0</strong> Done</span>
+              <span class="f-pill text-orange"><strong id="fStatWIP">0</strong> WIP</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Filter Results Cards List -->
+          <div id="historyResultsContainer" class="history-results-list">
+            <!-- Filtered Member Cards Render Here -->
+          </div>
+        </div>
+
+        <!-- Tab 3: Bulk Parser Content -->
         <div id="bulk-tab" class="tab-content">
           <div class="parser-header">
             <div>
@@ -205,7 +323,7 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           </div>
         </div>
 
-        <!-- Tab 3: Interactive Builder Content -->
+        <!-- Tab 4: Interactive Builder Content -->
         <div id="builder-tab" class="tab-content">
           <div class="builder-toolbar">
             <div class="builder-actions-left">
@@ -223,11 +341,11 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           </div>
         </div>
 
-        <!-- Tab 4: History & Logs -->
+        <!-- Tab 5: History & Logs -->
         <div id="history-tab" class="tab-content">
           <div class="history-header">
             <h3>Dispatched Status Logs</h3>
-            <p class="section-desc">View past reports and carry over unresolved WIP tasks.</p>
+            <p class="section-desc">View past reports dispatched to Google Chat.</p>
           </div>
           <div id="historyList" class="history-list">
             <div class="empty-state">No past reports saved yet. Send your first report to see history!</div>

@@ -18,14 +18,48 @@ const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'task_automation_data') : pat
 const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DRAFT_FILE = path.join(DATA_DIR, 'today_draft.json');
+const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
 
-// Ensure data directory exists
+// Helper: Format Date DD/MM/YYYY in Asia/Kolkata / Local timezone
+function getFormattedToday(dateObj = new Date()) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    return formatter.format(dateObj);
+  } catch (e) {
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+}
+
+// Helper: Format ISO Date YYYY-MM-DD
+function getIsoDate(dateObj = new Date()) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(dateObj);
+  } catch (e) {
+    return dateObj.toISOString().split('T')[0];
+  }
+}
+
+// Ensure data directory exists and seed initial files
 try {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  // If on Vercel, copy initial config/draft from package if exists
+  // If on Vercel, copy initial config/draft/submissions from package if exists
   const localDataDir = path.join(__dirname, 'data');
   if (isVercel && fs.existsSync(localDataDir)) {
     try {
@@ -34,6 +68,9 @@ try {
       }
       if (!fs.existsSync(DRAFT_FILE) && fs.existsSync(path.join(localDataDir, 'today_draft.json'))) {
         fs.copyFileSync(path.join(localDataDir, 'today_draft.json'), DRAFT_FILE);
+      }
+      if (!fs.existsSync(SUBMISSIONS_FILE) && fs.existsSync(path.join(localDataDir, 'submissions_log.json'))) {
+        fs.copyFileSync(path.join(localDataDir, 'submissions_log.json'), SUBMISSIONS_FILE);
       }
     } catch (e) {}
   }
@@ -50,6 +87,29 @@ try {
   }
   if (!fs.existsSync(DRAFT_FILE)) {
     fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: '', teamData: [] }));
+  }
+  if (!fs.existsSync(SUBMISSIONS_FILE)) {
+    // Seed with existing draft if available
+    let initialSubmissions = [];
+    if (fs.existsSync(DRAFT_FILE)) {
+      try {
+        const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{}');
+        const draftDate = draft.date || getFormattedToday();
+        if (Array.isArray(draft.teamData)) {
+          initialSubmissions = draft.teamData.map((m, idx) => ({
+            id: `seed-${Date.now()}-${idx}`,
+            member: m.name,
+            role: m.role || '',
+            note: m.note || '',
+            projects: m.projects || [],
+            date: draftDate,
+            isoDate: getIsoDate(),
+            timestamp: new Date().toISOString()
+          }));
+        }
+      } catch (e) {}
+    }
+    fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(initialSubmissions, null, 2));
   }
 } catch (err) {
   console.error('Error initializing data directory:', err.message);
@@ -169,8 +229,10 @@ app.post('/api/submit-task', (req, res) => {
       return res.status(400).json({ success: false, error: 'Member name is required.' });
     }
 
+    const todayDate = getFormattedToday();
+    const todayIso = getIsoDate();
     const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
-    draft.date = getFormattedToday();
+    draft.date = todayDate;
 
     function parseTaskLines(taskStr) {
       return (taskStr || '').split('\n')
@@ -184,7 +246,7 @@ app.post('/api/submit-task', (req, res) => {
             clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress)/i, '').replace(/\bWIP\b/i, '').trim();
           } else if (/[-—–=>:]+\s*(done|completed)/i.test(clean) || /\bDone\b/i.test(clean)) {
             status = 'Done';
-            clean = clean.replace(/[-—–=>:]+\s*(done|completed)/i, '').replace(/\bDone\b/i.test(clean), '').trim();
+            clean = clean.replace(/[-—–=>:]+\s*(done|completed)/i, '').replace(/\bDone\b/i, '').trim();
           }
           return { text: clean || line, status };
         });
@@ -232,6 +294,38 @@ app.post('/api/submit-task', (req, res) => {
     }
 
     fs.writeFileSync(DRAFT_FILE, JSON.stringify(draft, null, 2));
+
+    // Log to SUBMISSIONS_FILE for historical filtering (Daily/Weekly/Monthly)
+    try {
+      let submissions = [];
+      if (fs.existsSync(SUBMISSIONS_FILE)) {
+        submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
+      }
+      const existingSubIndex = submissions.findIndex(s => 
+        s.member && s.member.toUpperCase() === memberName && (s.date === todayDate || s.isoDate === todayIso)
+      );
+
+      const submissionRecord = {
+        id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        member: memberName,
+        role: memberRole,
+        note: note || '',
+        projects: parsedProjects,
+        date: todayDate,
+        isoDate: todayIso,
+        timestamp: new Date().toISOString()
+      };
+
+      if (existingSubIndex >= 0) {
+        submissions[existingSubIndex] = submissionRecord;
+      } else {
+        submissions.unshift(submissionRecord);
+      }
+      fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions.slice(0, 1000), null, 2));
+    } catch (subErr) {
+      console.error('Error recording submission log:', subErr.message);
+    }
+
     res.json({ success: true, message: `Tasks for ${member} across ${parsedProjects.length} project(s) recorded!` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -251,8 +345,149 @@ app.get('/api/draft', (req, res) => {
 app.post('/api/draft', (req, res) => {
   try {
     const { date, teamData } = req.body;
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date, teamData, lastUpdated: new Date().toISOString() }, null, 2));
+    const targetDate = date || getFormattedToday();
+    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: targetDate, teamData, lastUpdated: new Date().toISOString() }, null, 2));
+
+    // Sync teamData to submissions_log.json
+    try {
+      if (Array.isArray(teamData) && teamData.length > 0) {
+        let submissions = [];
+        if (fs.existsSync(SUBMISSIONS_FILE)) {
+          submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
+        }
+        teamData.forEach(m => {
+          if (!m.name) return;
+          const mName = m.name.toUpperCase();
+          const existingIdx = submissions.findIndex(s => 
+            s.member && s.member.toUpperCase() === mName && s.date === targetDate
+          );
+          const rec = {
+            id: existingIdx >= 0 ? submissions[existingIdx].id : `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            member: mName,
+            role: m.role || '',
+            note: m.note || '',
+            projects: m.projects || [],
+            date: targetDate,
+            isoDate: getIsoDate(),
+            timestamp: new Date().toISOString()
+          };
+          if (existingIdx >= 0) {
+            submissions[existingIdx] = rec;
+          } else {
+            submissions.unshift(rec);
+          }
+        });
+        fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions.slice(0, 1000), null, 2));
+      }
+    } catch (e) {}
+
     res.json({ success: true, message: 'Draft saved' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Submissions History & Filter API (Daily, Weekly, Monthly, By Member & Date)
+app.get('/api/submissions', (req, res) => {
+  try {
+    let submissions = [];
+    if (fs.existsSync(SUBMISSIONS_FILE)) {
+      submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
+    }
+
+    const { member, period, date, startDate, endDate, search } = req.query;
+
+    let filtered = [...submissions];
+
+    // Filter by Member
+    if (member && member.toUpperCase() !== 'ALL') {
+      const targetMember = member.toUpperCase().trim();
+      filtered = filtered.filter(s => s.member && s.member.toUpperCase().includes(targetMember));
+    }
+
+    // Reference Date calculation
+    const refDateStr = date || getIsoDate();
+    let refDate = new Date(refDateStr);
+    if (isNaN(refDate.getTime())) {
+      refDate = new Date();
+    }
+
+    // Filter by Period
+    if (period === 'daily') {
+      const targetDateFormatted = getFormattedToday(refDate);
+      const targetIso = getIsoDate(refDate);
+      filtered = filtered.filter(s => s.date === targetDateFormatted || s.isoDate === targetIso);
+    } else if (period === 'weekly') {
+      // Past 7 days from refDate
+      const endMs = refDate.getTime() + (24 * 60 * 60 * 1000); // end of refDate day
+      const startMs = endMs - (7 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter(s => {
+        const itemTime = new Date(s.timestamp || s.isoDate || s.date).getTime();
+        return !isNaN(itemTime) && itemTime >= startMs && itemTime <= endMs;
+      });
+    } else if (period === 'monthly') {
+      // Past 30 days or same Month & Year
+      const targetMonth = refDate.getMonth();
+      const targetYear = refDate.getFullYear();
+      filtered = filtered.filter(s => {
+        const itemDate = new Date(s.timestamp || s.isoDate || s.date);
+        if (!isNaN(itemDate.getTime())) {
+          return itemDate.getMonth() === targetMonth && itemDate.getFullYear() === targetYear;
+        }
+        // Fallback for DD/MM/YYYY
+        if (s.date && s.date.includes('/')) {
+          const parts = s.date.split('/');
+          return parseInt(parts[1], 10) === targetMonth + 1 && parseInt(parts[2], 10) === targetYear;
+        }
+        return true;
+      });
+    } else if (startDate && endDate) {
+      const sMs = new Date(startDate).getTime();
+      const eMs = new Date(endDate).getTime() + (24 * 60 * 60 * 1000);
+      filtered = filtered.filter(s => {
+        const itemTime = new Date(s.timestamp || s.isoDate || s.date).getTime();
+        return !isNaN(itemTime) && itemTime >= sMs && itemTime <= eMs;
+      });
+    }
+
+    // Filter by Search Query
+    if (search && search.trim()) {
+      const q = search.toLowerCase().trim();
+      filtered = filtered.filter(s => {
+        const memberMatch = (s.member || '').toLowerCase().includes(q);
+        const noteMatch = (s.note || '').toLowerCase().includes(q);
+        const projectMatch = (s.projects || []).some(p => 
+          (p.name || '').toLowerCase().includes(q) || 
+          (p.tasks || []).some(t => (typeof t === 'string' ? t : (t.text || '')).toLowerCase().includes(q))
+        );
+        return memberMatch || noteMatch || projectMatch;
+      });
+    }
+
+    // Sort newest first
+    filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+    res.json({
+      success: true,
+      count: filtered.length,
+      submissions: filtered
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete a submission log entry
+app.delete('/api/submissions/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    let submissions = [];
+    if (fs.existsSync(SUBMISSIONS_FILE)) {
+      submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
+    }
+    const updated = submissions.filter(s => s.id !== id);
+    fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(updated, null, 2));
+    res.json({ success: true, message: 'Submission record removed.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

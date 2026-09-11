@@ -133,13 +133,35 @@ function getFormattedToday() {
   }
 }
 
+// Helper: Format ISO Date YYYY-MM-DD
+function getIsoToday(dateObj = new Date()) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(dateObj);
+  } catch (e) {
+    return dateObj.toISOString().split('T')[0];
+  }
+}
+
 // App State
 let state = {
   date: getFormattedToday(),
   webhookUrl: '',
   reminderTime: '18:28',
   teamData: [],
-  history: []
+  history: [],
+  filter: {
+    period: 'daily',
+    date: getIsoToday(),
+    member: 'ALL',
+    search: '',
+    results: []
+  }
 };
 
 // DOM Elements
@@ -178,6 +200,24 @@ const btnPreloadTeam = document.getElementById('btnPreloadTeam');
 const btnClearAll = document.getElementById('btnClearAll');
 const historyList = document.getElementById('historyList');
 
+// Filter & Calendar DOM Elements
+const historyDatePicker = document.getElementById('historyDatePicker');
+const historyMemberSelect = document.getElementById('historyMemberSelect');
+const historySearchInput = document.getElementById('historySearchInput');
+const periodToggleGroup = document.getElementById('periodToggleGroup');
+const btnApplyFilter = document.getElementById('btnApplyFilter');
+const btnResetFilter = document.getElementById('btnResetFilter');
+const btnDateToday = document.getElementById('btnDateToday');
+const btnDateYesterday = document.getElementById('btnDateYesterday');
+const btnCopyFilteredSummary = document.getElementById('btnCopyFilteredSummary');
+const btnLoadFilteredToMaster = document.getElementById('btnLoadFilteredToMaster');
+const filterSummaryText = document.getElementById('filterSummaryText');
+const fStatSubmissions = document.getElementById('fStatSubmissions');
+const fStatMembers = document.getElementById('fStatMembers');
+const fStatDone = document.getElementById('fStatDone');
+const fStatWIP = document.getElementById('fStatWIP');
+const historyResultsContainer = document.getElementById('historyResultsContainer');
+
 // Stats Elements
 const statMembers = document.getElementById('statMembers');
 const statProjects = document.getElementById('statProjects');
@@ -187,11 +227,14 @@ const statWIP = document.getElementById('statWIP');
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   reportDateInput.value = state.date;
+  if (historyDatePicker) historyDatePicker.value = state.filter.date;
   await loadConfig();
   await loadHistory();
   await loadTodayDraft();
+  await fetchAndRenderSubmissions();
 
   setupEventListeners();
+  setupFilterEventListeners();
   startReminderClock();
 });
 
@@ -207,6 +250,8 @@ function setupEventListeners() {
 
       if (tabId === 'history-tab') {
         loadHistory();
+      } else if (tabId === 'filter-tab') {
+        fetchAndRenderSubmissions();
       }
     });
   });
@@ -1196,6 +1241,476 @@ async function saveTodayDraft() {
   } catch (err) {
     console.error('Failed to save draft:', err);
   }
+}
+
+// -----------------------------------------------------------------------------
+// Calendar & Member Filter Engine (Daily, Weekly, Monthly & User Dropdown)
+// -----------------------------------------------------------------------------
+let searchDebounceTimer = null;
+
+function setupFilterEventListeners() {
+  if (!periodToggleGroup) return;
+
+  // Period Toggle Buttons (Daily, Weekly, Monthly, All)
+  periodToggleGroup.querySelectorAll('.period-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      periodToggleGroup.querySelectorAll('.period-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.filter.period = pill.getAttribute('data-period') || 'daily';
+      fetchAndRenderSubmissions();
+    });
+  });
+
+  // Calendar Date Picker Input
+  if (historyDatePicker) {
+    historyDatePicker.addEventListener('change', (e) => {
+      state.filter.date = e.target.value || getIsoToday();
+      fetchAndRenderSubmissions();
+    });
+  }
+
+  // Member Dropdown Select
+  if (historyMemberSelect) {
+    historyMemberSelect.addEventListener('change', (e) => {
+      state.filter.member = e.target.value || 'ALL';
+      fetchAndRenderSubmissions();
+    });
+  }
+
+  // Search Input with Debounce
+  if (historySearchInput) {
+    historySearchInput.addEventListener('input', (e) => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        state.filter.search = e.target.value.trim();
+        fetchAndRenderSubmissions();
+      }, 200);
+    });
+  }
+
+  // Apply Filter Button
+  if (btnApplyFilter) {
+    btnApplyFilter.addEventListener('click', () => {
+      fetchAndRenderSubmissions();
+      showToast('Filters applied successfully!', 'info');
+    });
+  }
+
+  // Reset Filter Button
+  if (btnResetFilter) {
+    btnResetFilter.addEventListener('click', () => {
+      state.filter.period = 'daily';
+      state.filter.date = getIsoToday();
+      state.filter.member = 'ALL';
+      state.filter.search = '';
+
+      if (historyDatePicker) historyDatePicker.value = state.filter.date;
+      if (historyMemberSelect) historyMemberSelect.value = 'ALL';
+      if (historySearchInput) historySearchInput.value = '';
+      if (periodToggleGroup) {
+        periodToggleGroup.querySelectorAll('.period-pill').forEach(p => {
+          p.classList.toggle('active', p.getAttribute('data-period') === 'daily');
+        });
+      }
+
+      fetchAndRenderSubmissions();
+      showToast('Filter reset to today (All Members)', 'info');
+    });
+  }
+
+  // Quick Date: Today
+  if (btnDateToday) {
+    btnDateToday.addEventListener('click', () => {
+      state.filter.date = getIsoToday();
+      if (historyDatePicker) historyDatePicker.value = state.filter.date;
+      fetchAndRenderSubmissions();
+      showToast('Set date filter to Today', 'info');
+    });
+  }
+
+  // Quick Date: Yesterday
+  if (btnDateYesterday) {
+    btnDateYesterday.addEventListener('click', () => {
+      const yDate = new Date();
+      yDate.setDate(yDate.getDate() - 1);
+      state.filter.date = getIsoToday(yDate);
+      if (historyDatePicker) historyDatePicker.value = state.filter.date;
+      fetchAndRenderSubmissions();
+      showToast('Set date filter to Yesterday', 'info');
+    });
+  }
+
+  // Copy Filtered Summary
+  if (btnCopyFilteredSummary) {
+    btnCopyFilteredSummary.addEventListener('click', () => {
+      if (!state.filter.results || state.filter.results.length === 0) {
+        showToast('No filtered submissions to copy!', 'warning');
+        return;
+      }
+      const summaryText = buildFormattedSummaryFromSubmissions(state.filter.results);
+      navigator.clipboard.writeText(summaryText).then(() => {
+        showToast(`📋 Copied summary for ${state.filter.results.length} member(s) to clipboard!`, 'success');
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = summaryText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast(`📋 Copied summary for ${state.filter.results.length} member(s)!`, 'success');
+      });
+    });
+  }
+
+  // Load Filtered to Live Master Draft
+  if (btnLoadFilteredToMaster) {
+    btnLoadFilteredToMaster.addEventListener('click', () => {
+      if (!state.filter.results || state.filter.results.length === 0) {
+        showToast('No filtered submissions to load!', 'warning');
+        return;
+      }
+      if (confirm(`Load all ${state.filter.results.length} filtered submission(s) into today's Live Master report?`)) {
+        state.filter.results.forEach(sub => {
+          const mName = (sub.member || '').toUpperCase();
+          const existingIdx = state.teamData.findIndex(m => m.name.toUpperCase() === mName);
+          const memberEntry = {
+            name: mName,
+            role: sub.role || '',
+            note: sub.note || '',
+            projects: sub.projects || []
+          };
+          if (existingIdx >= 0) {
+            state.teamData[existingIdx] = memberEntry;
+          } else {
+            state.teamData.push(memberEntry);
+          }
+        });
+
+        renderBuilder();
+        generateFormattedOutput();
+        renderChecklistTracker();
+        saveTodayDraft();
+        showToast(`⚡ Loaded ${state.filter.results.length} member(s) into Master Draft!`, 'success');
+        document.querySelector('[data-tab="single-drop-tab"]').click();
+      }
+    });
+  }
+}
+
+async function fetchAndRenderSubmissions() {
+  if (!historyResultsContainer) return;
+
+  try {
+    const params = new URLSearchParams();
+    if (state.filter.period) params.append('period', state.filter.period);
+    if (state.filter.date) params.append('date', state.filter.date);
+    if (state.filter.member && state.filter.member !== 'ALL') params.append('member', state.filter.member);
+    if (state.filter.search) params.append('search', state.filter.search);
+
+    const res = await fetch(`/api/submissions?${params.toString()}`);
+    const data = await res.json();
+
+    if (data.success && Array.isArray(data.submissions)) {
+      state.filter.results = data.submissions;
+      renderFilterSummary(data.submissions);
+      renderSubmissionCards(data.submissions);
+    } else {
+      state.filter.results = [];
+      renderFilterSummary([]);
+      renderSubmissionCards([]);
+    }
+  } catch (err) {
+    console.error('Error fetching submissions:', err);
+  }
+}
+
+function renderFilterSummary(submissions) {
+  if (!filterSummaryText) return;
+
+  // Period label
+  let periodLabel = 'Daily';
+  if (state.filter.period === 'weekly') periodLabel = 'Weekly (7 Days)';
+  else if (state.filter.period === 'monthly') periodLabel = 'Monthly (30 Days)';
+  else if (state.filter.period === 'all') periodLabel = 'All Time';
+
+  // Member label
+  const memberLabel = state.filter.member === 'ALL' ? 'All Team Members' : state.filter.member;
+
+  // Date display
+  let dateDisplay = state.filter.date;
+  if (state.filter.date) {
+    const dParts = state.filter.date.split('-');
+    if (dParts.length === 3) {
+      dateDisplay = `${dParts[2]}/${dParts[1]}/${dParts[0]}`;
+    }
+  }
+
+  let text = `Showing: <strong>${periodLabel}</strong>`;
+  if (state.filter.period !== 'all') {
+    text += ` (${dateDisplay})`;
+  }
+  text += ` for <strong>${memberLabel}</strong>`;
+
+  if (state.filter.search) {
+    text += ` • Matching "<em>${state.filter.search}</em>"`;
+  }
+
+  filterSummaryText.innerHTML = text;
+
+  // Calculate Metrics
+  const totalSubmissions = submissions.length;
+  const uniqueMembers = new Set(submissions.map(s => (s.member || '').toUpperCase())).size;
+  let doneCount = 0;
+  let wipCount = 0;
+
+  submissions.forEach(s => {
+    (s.projects || []).forEach(p => {
+      (p.tasks || []).forEach(t => {
+        const status = typeof t === 'string' ? '' : (t.status || '');
+        if (status === 'Done') doneCount++;
+        else if (status === 'WIP' || status === 'In Progress') wipCount++;
+      });
+    });
+  });
+
+  if (fStatSubmissions) fStatSubmissions.textContent = totalSubmissions;
+  if (fStatMembers) fStatMembers.textContent = uniqueMembers;
+  if (fStatDone) fStatDone.textContent = doneCount;
+  if (fStatWIP) fStatWIP.textContent = wipCount;
+}
+
+function renderSubmissionCards(submissions) {
+  if (!historyResultsContainer) return;
+  historyResultsContainer.innerHTML = '';
+
+  if (submissions.length === 0) {
+    historyResultsContainer.innerHTML = `
+      <div class="empty-history-box">
+        <div class="empty-history-icon">📭</div>
+        <strong style="color: #cbd5e1; font-size: 1rem;">No Task Submissions Found</strong>
+        <p style="font-size: 0.82rem; color: #64748b; max-width: 420px;">
+          No member updates match your selected date (<strong>${state.filter.date}</strong>), period (<strong>${state.filter.period}</strong>), or member (<strong>${state.filter.member}</strong>).
+        </p>
+        <button class="btn btn-xs btn-outline" onclick="document.getElementById('btnResetFilter').click()">Reset Filters</button>
+      </div>
+    `;
+    return;
+  }
+
+  submissions.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'history-member-card';
+
+    // Top Header
+    const topRow = document.createElement('div');
+    topRow.className = 'history-member-top';
+
+    const titleGroup = document.createElement('div');
+    titleGroup.className = 'history-member-title-group';
+
+    const initial = (item.member || 'U').charAt(0).toUpperCase();
+    const avatar = document.createElement('div');
+    avatar.className = 'member-avatar-pill';
+    avatar.textContent = initial;
+
+    const nameHeading = document.createElement('span');
+    nameHeading.className = 'member-name-heading';
+    nameHeading.textContent = item.member || 'UNKNOWN';
+
+    titleGroup.appendChild(avatar);
+    titleGroup.appendChild(nameHeading);
+
+    if (item.role) {
+      const roleTag = document.createElement('span');
+      roleTag.className = 'role-tag-badge';
+      roleTag.textContent = item.role;
+      titleGroup.appendChild(roleTag);
+    }
+
+    // Date tag
+    const dateTag = document.createElement('span');
+    dateTag.className = 'date-tag-badge';
+    let timeStr = '';
+    if (item.timestamp) {
+      try {
+        const tDate = new Date(item.timestamp);
+        timeStr = ' • ' + tDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {}
+    }
+    dateTag.textContent = `📅 ${item.date || 'Date'}${timeStr}`;
+    titleGroup.appendChild(dateTag);
+
+    // Attendance Note Tag
+    if (item.note) {
+      const noteTag = document.createElement('span');
+      const upperNote = item.note.toUpperCase();
+      if (upperNote.includes('HALF DAY')) noteTag.className = 'note-tag-half-day';
+      else if (upperNote.includes('LEAVE')) noteTag.className = 'note-tag-leave';
+      else if (upperNote.includes('HOME') || upperNote.includes('WFH')) noteTag.className = 'note-tag-wfh';
+      else noteTag.className = 'note-tag-half-day';
+      noteTag.textContent = item.note;
+      titleGroup.appendChild(noteTag);
+    }
+
+    // Header Actions
+    const cardActions = document.createElement('div');
+    cardActions.className = 'history-card-actions';
+
+    // Copy Button
+    const btnCopy = document.createElement('button');
+    btnCopy.className = 'btn btn-xs btn-secondary';
+    btnCopy.title = 'Copy this member\'s tasks';
+    btnCopy.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      Copy
+    `;
+    btnCopy.addEventListener('click', () => {
+      const singleText = buildSingleMemberText(item);
+      navigator.clipboard.writeText(singleText).then(() => {
+        showToast(`Copied tasks for ${item.member}!`, 'success');
+      });
+    });
+
+    // Load to Master Draft Button
+    const btnLoad = document.createElement('button');
+    btnLoad.className = 'btn btn-xs btn-outline';
+    btnLoad.title = 'Merge this update into today\'s live draft';
+    btnLoad.innerHTML = `⚡ Load`;
+    btnLoad.addEventListener('click', () => {
+      const mName = (item.member || '').toUpperCase();
+      const existingIdx = state.teamData.findIndex(m => m.name.toUpperCase() === mName);
+      const memberEntry = {
+        name: mName,
+        role: item.role || '',
+        note: item.note || '',
+        projects: item.projects || []
+      };
+      if (existingIdx >= 0) {
+        state.teamData[existingIdx] = memberEntry;
+      } else {
+        state.teamData.push(memberEntry);
+      }
+      renderBuilder();
+      generateFormattedOutput();
+      renderChecklistTracker();
+      saveTodayDraft();
+      showToast(`Merged ${item.member}'s update into Live Master Draft!`, 'success');
+    });
+
+    // Delete Button
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn btn-xs btn-ghost text-red';
+    btnDel.title = 'Delete this record';
+    btnDel.innerHTML = `&times;`;
+    btnDel.addEventListener('click', async () => {
+      if (confirm(`Remove submission log for ${item.member} on ${item.date}?`)) {
+        try {
+          const delRes = await fetch(`/api/submissions/${item.id}`, { method: 'DELETE' });
+          const delData = await delRes.json();
+          if (delData.success) {
+            showToast(`Submission removed`, 'info');
+            fetchAndRenderSubmissions();
+          }
+        } catch (e) {
+          showToast(`Delete failed: ${e.message}`, 'error');
+        }
+      }
+    });
+
+    cardActions.appendChild(btnCopy);
+    cardActions.appendChild(btnLoad);
+    cardActions.appendChild(btnDel);
+
+    topRow.appendChild(titleGroup);
+    topRow.appendChild(cardActions);
+    card.appendChild(topRow);
+
+    // Projects Container
+    const projContainer = document.createElement('div');
+    projContainer.className = 'history-projects-container';
+
+    (item.projects || []).forEach(proj => {
+      const projBlock = document.createElement('div');
+      projBlock.className = 'history-project-block';
+
+      const projName = document.createElement('div');
+      projName.className = 'history-project-name';
+      projName.innerHTML = `<span>📁</span> <span>${proj.name || 'General Tasks'}</span>`;
+      projBlock.appendChild(projName);
+
+      const tasksList = document.createElement('ul');
+      tasksList.className = 'history-tasks-list';
+
+      (proj.tasks || []).forEach(t => {
+        const tText = typeof t === 'string' ? t : (t.text || '');
+        const tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
+
+        const taskItem = document.createElement('li');
+        taskItem.className = 'history-task-item';
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'history-task-item-text';
+        textSpan.textContent = `• ${tText}`;
+
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `task-status-badge ${tStatus.toLowerCase() === 'wip' || tStatus.toLowerCase() === 'in progress' ? 'wip' : 'done'}`;
+        statusBadge.textContent = tStatus === 'Done' ? '=> Done' : '=> WIP';
+
+        taskItem.appendChild(textSpan);
+        taskItem.appendChild(statusBadge);
+        tasksList.appendChild(taskItem);
+      });
+
+      projBlock.appendChild(tasksList);
+      projContainer.appendChild(projBlock);
+    });
+
+    card.appendChild(projContainer);
+    historyResultsContainer.appendChild(card);
+  });
+}
+
+function buildSingleMemberText(item) {
+  let output = '';
+  let roleStr = item.role ? `(${item.role})` : '';
+  let cleanNote = item.note ? item.note.replace(/^[:-]+|[:-]+$/g, '').trim() : '';
+  let noteStr = cleanNote ? ` *${cleanNote}*` : '';
+
+  if (item.projects && item.projects.length > 0) {
+    item.projects.forEach((proj, pIdx) => {
+      let cleanProj = proj.name ? proj.name.replace(/^[:-]+|[:-]+$/g, '').trim() : '';
+      if (pIdx === 0) {
+        let projDisplay = cleanProj ? ` ${cleanProj}:-` : ':-';
+        let headerContent = item.role ? `${item.member}${roleStr}:-${projDisplay}` : `${item.member}:-${projDisplay}`;
+        output += `*${headerContent}*${noteStr}\n\n`;
+      } else {
+        output += `*${cleanProj}:-*\n\n`;
+      }
+      (proj.tasks || []).forEach(t => {
+        let tText = typeof t === 'string' ? t : (t.text || '');
+        let tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
+        if (tStatus === 'Done') output += `${tText} => Done\n`;
+        else if (tStatus === 'WIP') output += `${tText} => WIP\n`;
+        else output += `${tText}\n`;
+      });
+      output += '\n';
+    });
+  }
+  return output.trimEnd();
+}
+
+function buildFormattedSummaryFromSubmissions(submissions) {
+  let dateTitle = state.filter.date || getFormattedToday();
+  if (state.filter.date && state.filter.date.includes('-')) {
+    const parts = state.filter.date.split('-');
+    dateTitle = `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+
+  let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${dateTitle}\n\n`;
+  submissions.forEach(sub => {
+    output += buildSingleMemberText(sub) + '\n\n';
+  });
+  return output.trimEnd();
 }
 
 // -----------------------------------------------------------------------------

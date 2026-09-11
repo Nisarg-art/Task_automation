@@ -334,18 +334,18 @@
     {
       "name": "AJAY",
       "role": "Designer",
-      "note": "",
+      "note": "ON HALF DAY",
       "projects": [
         {
-          "name": "TEST",
+          "name": "Alarm App",
           "tasks": [
             {
-              "text": "DO REGRESSION TESTING",
+              "text": "New sound effects",
               "status": "Done"
             },
             {
-              "text": "UNDERSTAND THE FLOW",
-              "status": "Done"
+              "text": "Snooze setting",
+              "status": "WIP"
             }
           ]
         }

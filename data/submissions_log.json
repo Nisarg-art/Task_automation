@@ -1,0 +1,434 @@
+[
+  {
+    "id": "sub-1726055400000-harshad",
+    "member": "HARSHAD",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "RankMyTrip",
+        "tasks": [
+          {
+            "text": "Tabbar UI",
+            "status": "Done"
+          },
+          {
+            "text": "Add Vehicle Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Vehicle Success Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Drive History G-Force Distribution Screen UI",
+            "status": "WIP"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T12:30:00.000Z"
+  },
+  {
+    "id": "sub-1726055400001-kiran",
+    "member": "KIRAN",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "FirstText App",
+        "tasks": [
+          {
+            "text": "Fix bugs (3)",
+            "status": "Done"
+          },
+          {
+            "text": "Change image issue",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "Second Number App",
+        "tasks": [
+          {
+            "text": "Fix bugs (4)",
+            "status": "Done"
+          },
+          {
+            "text": "Upload new build",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T13:10:00.000Z"
+  },
+  {
+    "id": "sub-1726055400002-dhruv",
+    "member": "DHRUV",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "Crystal Wish app",
+        "tasks": [
+          {
+            "text": "research on Semantic Search",
+            "status": "Done"
+          },
+          {
+            "text": "script for add data",
+            "status": "Done"
+          },
+          {
+            "text": "generate audio api",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T11:45:00.000Z"
+  },
+  {
+    "id": "sub-1726055400003-pranav",
+    "member": "PRANAV",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "Happy Reward's Dashboard Application",
+        "tasks": [
+          {
+            "text": "Enhanced and optimized the overall Dashboard UI/UX, improving usability, consistency, intuitive navigation, and overall user experience. Completed and successfully deployed the updated dashboard at https://happy-rewards-frontend.vercel.app .",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "Happy Reward's INGENICO Application",
+        "tasks": [
+          {
+            "text": "Actively developing the Happy Rewards application for Ingenico AXIUM payment terminals, implementing SDK integrations, payment workflows, device capabilities, and security architecture !",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T14:15:00.000Z"
+  },
+  {
+    "id": "sub-1726055400004-kartik",
+    "member": "KARTIK",
+    "role": "",
+    "note": "ON HALF DAY",
+    "projects": [
+      {
+        "name": "Happy Reward Shopify",
+        "tasks": [
+          {
+            "text": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension",
+            "status": "Done"
+          },
+          {
+            "text": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T13:40:00.000Z"
+  },
+  {
+    "id": "sub-1726055400005-deversh",
+    "member": "DEVERSH",
+    "role": "Nodejs Developer",
+    "note": "",
+    "projects": [
+      {
+        "name": "SEC EDGAR Terminal",
+        "tasks": [
+          {
+            "text": "Update TradeDetailModal styles and improve accessibility",
+            "status": "Done"
+          },
+          {
+            "text": "Update ingestion status timestamps and remove unused section from LandingPage",
+            "status": "Done"
+          },
+          {
+            "text": "Simplify active watchlist handling and clean up unused code in WatchlistManagementView",
+            "status": "Done"
+          },
+          {
+            "text": "Implement robust Stripe webhook handling and plan synchronization logic",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T15:00:00.000Z"
+  },
+  {
+    "id": "sub-1726055400006-radhey",
+    "member": "RADHEY",
+    "role": "Nodejs Developer",
+    "note": "",
+    "projects": [
+      {
+        "name": "AI-powered SEO/marketing platform",
+        "tasks": [
+          {
+            "text": "Merge all changes of Social module to main and deploy on vercel",
+            "status": "Done"
+          },
+          {
+            "text": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows",
+            "status": "Done"
+          },
+          {
+            "text": "Understand how google ads works",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T15:30:00.000Z"
+  },
+  {
+    "id": "sub-1789115938175-ni743",
+    "member": "AJAY",
+    "role": "Designer",
+    "note": "ON HALF DAY",
+    "projects": [
+      {
+        "name": "Alarm App",
+        "tasks": [
+          {
+            "text": "New sound effects",
+            "status": "Done"
+          },
+          {
+            "text": "Snooze setting",
+            "status": "WIP"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T08:38:58.175Z"
+  },
+  {
+    "id": "sub-1726055400008-hasti",
+    "member": "HASTI",
+    "role": "Designer",
+    "note": "",
+    "projects": [
+      {
+        "name": "AI Life Mentor",
+        "tasks": [
+          {
+            "text": "Edit App Flow",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "General Tasks",
+        "tasks": [
+          {
+            "text": "Exploring Figma Agent",
+            "status": "Done"
+          },
+          {
+            "text": "AI Models for Design",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T16:20:00.000Z"
+  },
+  {
+    "id": "sub-1726055400009-nisarg",
+    "member": "NISARG",
+    "role": "QA & Scrum Master",
+    "note": "",
+    "projects": [
+      {
+        "name": "General Tasks",
+        "tasks": [
+          {
+            "text": "Do regression testing on PrivateLine second number app",
+            "status": "Done"
+          },
+          {
+            "text": "Do UI testing on FirstText app and raised a bug in freedcamp",
+            "status": "Done"
+          },
+          {
+            "text": "Discussed the issues I faced in the GLP-1 Tracker app with Dhruv",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T16:25:00.000Z"
+  },
+  {
+    "id": "sub-1725969000000-harshad-10",
+    "member": "HARSHAD",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "RankMyTrip",
+        "tasks": [
+          {
+            "text": "Setting up your account Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Car Select Brand Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Car Select Brand Model Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Drive Tab Screen UI",
+            "status": "Done"
+          },
+          {
+            "text": "Drive History List Screen UI",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "10/09/2026",
+    "isoDate": "2026-09-10",
+    "timestamp": "2026-09-10T14:30:00.000Z"
+  },
+  {
+    "id": "sub-1725969000001-kartik-10",
+    "member": "KARTIK",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "Hamilton Dabbawala",
+        "tasks": [
+          {
+            "text": "Investigated and verified the issue where Membership visits were not being deducted properly",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "VIP Cannabis",
+        "tasks": [
+          {
+            "text": "Added and configured background synchronization scripts on the server to sync all Orders and Products automatically",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "10/09/2026",
+    "isoDate": "2026-09-10",
+    "timestamp": "2026-09-10T15:00:00.000Z"
+  },
+  {
+    "id": "sub-1725882600000-dhruv-09",
+    "member": "DHRUV",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "Crystal Wish app",
+        "tasks": [
+          {
+            "text": "Initial database schemas and OpenAI API embedding integration",
+            "status": "Done"
+          },
+          {
+            "text": "Vector storage performance profiling",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "09/09/2026",
+    "isoDate": "2026-09-09",
+    "timestamp": "2026-09-09T16:00:00.000Z"
+  },
+  {
+    "id": "sub-1725796200000-deversh-08",
+    "member": "DEVERSH",
+    "role": "Nodejs Developer",
+    "note": "",
+    "projects": [
+      {
+        "name": "SEC EDGAR Terminal",
+        "tasks": [
+          {
+            "text": "PlanGuard logic to support free tier and refine billing access test cases",
+            "status": "Done"
+          },
+          {
+            "text": "Subscription cancellation endpoint, improve trial status logic, and allow deletion of final watchlist",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "08/09/2026",
+    "isoDate": "2026-09-08",
+    "timestamp": "2026-09-08T15:45:00.000Z"
+  },
+  {
+    "id": "sub-1725537000000-kiran-05",
+    "member": "KIRAN",
+    "role": "",
+    "note": "WORK FROM HOME",
+    "projects": [
+      {
+        "name": "The Crystal Wish App",
+        "tasks": [
+          {
+            "text": "Splash screen & No internet screen implementation",
+            "status": "Done"
+          },
+          {
+            "text": "Onboarding first flow and package dependencies",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "05/09/2026",
+    "isoDate": "2026-09-05",
+    "timestamp": "2026-09-05T17:15:00.000Z"
+  }
+]
