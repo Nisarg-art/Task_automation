@@ -19,6 +19,47 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DRAFT_FILE = path.join(DATA_DIR, 'today_draft.json');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+const DEFAULT_USERS = [
+  { id: "u1", name: "HARSHAD", role: "", password: "harshad123" },
+  { id: "u2", name: "KIRAN", role: "", password: "kiran123" },
+  { id: "u3", name: "DHRUV", role: "", password: "dhruv123" },
+  { id: "u4", name: "PRANAV", role: "", password: "pranav123" },
+  { id: "u5", name: "KARTIK", role: "", password: "kartik123" },
+  { id: "u6", name: "DEVERSH", role: "Nodejs Developer", password: "deversh123" },
+  { id: "u7", name: "RADHEY", role: "Nodejs Developer", password: "radhey123" },
+  { id: "u8", name: "AJAY", role: "Designer", password: "ajay123" },
+  { id: "u9", name: "HASTI", role: "Designer", password: "hasti123" },
+  { id: "u10", name: "NISARG", role: "QA & Scrum Master", password: "nisarg123" }
+];
+
+// Token Helpers (Permanent Non-Expiring Session Tokens)
+function generateUserToken(user) {
+  const payload = {
+    id: user.id,
+    name: user.name,
+    role: user.role || '',
+    sig: 'scrum_auth_v1'
+  };
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+}
+
+function verifyUserToken(tokenStr) {
+  if (!tokenStr) return null;
+  try {
+    const raw = Buffer.from(tokenStr, 'base64url').toString('utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.name && parsed.sig === 'scrum_auth_v1') {
+      const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+      const match = users.find(u => u.name.toUpperCase() === parsed.name.toUpperCase());
+      return match || { name: parsed.name, role: parsed.role || '' };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
 
 // Helper: Format Date DD/MM/YYYY in Asia/Kolkata / Local timezone
 function getFormattedToday(dateObj = new Date()) {
@@ -59,7 +100,7 @@ try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  // If on Vercel, copy initial config/draft/submissions from package if exists
+  // If on Vercel, copy initial config/draft/submissions/users from package if exists
   const localDataDir = path.join(__dirname, 'data');
   if (isVercel && fs.existsSync(localDataDir)) {
     try {
@@ -72,9 +113,15 @@ try {
       if (!fs.existsSync(SUBMISSIONS_FILE) && fs.existsSync(path.join(localDataDir, 'submissions_log.json'))) {
         fs.copyFileSync(path.join(localDataDir, 'submissions_log.json'), SUBMISSIONS_FILE);
       }
+      if (!fs.existsSync(USERS_FILE) && fs.existsSync(path.join(localDataDir, 'users.json'))) {
+        fs.copyFileSync(path.join(localDataDir, 'users.json'), USERS_FILE);
+      }
     } catch (e) {}
   }
 
+  if (!fs.existsSync(USERS_FILE)) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(DEFAULT_USERS, null, 2));
+  }
   if (!fs.existsSync(HISTORY_FILE)) {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
   }
@@ -221,12 +268,107 @@ app.post('/api/send-chat', async (req, res) => {
   }
 });
 
-// Member Direct Submission API from /submit (Supports Single & Multi-Projects)
+// -----------------------------------------------------------------------------
+// Authentication & User Management APIs
+// -----------------------------------------------------------------------------
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { member, password } = req.body;
+    if (!member || !password) {
+      return res.status(400).json({ success: false, error: 'Member name and password are required.' });
+    }
+
+    const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+    const user = users.find(u => u.name.toUpperCase() === member.toUpperCase().trim());
+
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Employee name not found in team roster.' });
+    }
+
+    if (user.password && user.password !== password.trim()) {
+      return res.status(401).json({ success: false, error: 'Incorrect password. Please verify with your Scrum Master.' });
+    }
+
+    const token = generateUserToken(user);
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role || ''
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token;
+    const user = verifyUserToken(token);
+
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Session expired or invalid.' });
+    }
+
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/users', (req, res) => {
+  try {
+    const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/users/update', (req, res) => {
+  try {
+    const { users } = req.body;
+    if (!Array.isArray(users)) {
+      return res.status(400).json({ success: false, error: 'Invalid users array.' });
+    }
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    res.json({ success: true, message: 'User credentials updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Member Direct Submission API from /submit (Supports Single & Multi-Projects with Auth Lock)
 app.post('/api/submit-task', (req, res) => {
   try {
-    const { member, project, tasks, projects, note } = req.body;
+    const { member, project, tasks, projects, note, password, token } = req.body;
     if (!member) {
       return res.status(400).json({ success: false, error: 'Member name is required.' });
+    }
+
+    // Auth Validation: Verify user token or password
+    const authHeader = req.headers.authorization || '';
+    const authToken = authHeader.replace(/^Bearer\s+/i, '') || token;
+    let authUser = verifyUserToken(authToken);
+
+    if (!authUser && password) {
+      const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+      const userMatch = users.find(u => u.name.toUpperCase() === member.toUpperCase());
+      if (userMatch && userMatch.password === password.trim()) {
+        authUser = userMatch;
+      }
+    }
+
+    // If caller has an auth token, prevent them from submitting under other employee names
+    if (authUser && authUser.name.toUpperCase() !== member.toUpperCase().trim()) {
+      return res.status(403).json({
+        success: false,
+        error: `Access Denied: You are logged in as ${authUser.name}. You cannot submit tasks on behalf of ${member}.`
+      });
     }
 
     const todayDate = getFormattedToday();

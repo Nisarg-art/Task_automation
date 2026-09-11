@@ -388,40 +388,70 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     </main>
   </div>
 
-  <!-- Settings / Webhook & Reminder Modal -->
+  <!-- Settings / Webhook, Reminder & Passwords Modal -->
   <div id="settingsModal" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card modal-card-wide">
       <div class="modal-header">
         <div class="modal-title-wrap">
           <div class="modal-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           </div>
           <div>
-            <h3>Settings & Automation Config</h3>
-            <p class="modal-subtitle">Configure Google Chat Webhook and Daily Reminder Time.</p>
+            <h3>Settings & Team Access Management</h3>
+            <p class="modal-subtitle">Configure Google Chat Webhook and manage Employee Passwords.</p>
           </div>
         </div>
         <button id="btnCloseSettings" class="btn-close">&times;</button>
       </div>
 
+      <!-- Settings Sub-Tabs -->
+      <div class="settings-nav-tabs">
+        <button type="button" class="settings-tab-btn active" data-target="settings-webhook-tab">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          Google Chat Webhook & Dispatch
+        </button>
+        <button type="button" class="settings-tab-btn" data-target="settings-passwords-tab">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          🔐 Employee Passwords & Auth
+        </button>
+      </div>
+
       <div class="modal-body">
-        <div class="form-group">
-          <label for="webhookUrlInput">Google Chat Incoming Webhook URL</label>
-          <input type="text" id="webhookUrlInput" class="input-field" placeholder="https://chat.googleapis.com/v1/spaces/XXXX/messages?key=YYYY&token=ZZZZ">
-          <small class="form-help">
-            In your Google Chat Space ➔ Click Space Name ➔ <em>Apps & Integrations</em> ➔ <em>Manage Webhooks</em> ➔ Add Webhook & paste URL here.
-          </small>
+        <!-- Sub-Tab 1: Webhook & Dispatch -->
+        <div id="settings-webhook-tab" class="settings-tab-pane active">
+          <div class="form-group">
+            <label for="webhookUrlInput">Google Chat Incoming Webhook URL</label>
+            <input type="text" id="webhookUrlInput" class="input-field" placeholder="https://chat.googleapis.com/v1/spaces/XXXX/messages?key=YYYY&token=ZZZZ">
+            <small class="form-help">
+              In your Google Chat Space ➔ Space Name ➔ <em>Apps & Integrations</em> ➔ <em>Manage Webhooks</em> ➔ Add Webhook & paste URL here.
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="reminderTimeInput">Daily Dispatch Reminder Time (24h format)</label>
+            <input type="time" id="reminderTimeInput" class="input-field" value="18:28">
+            <small class="form-help">
+              The dashboard will alert you at <strong>6:28 PM</strong> to review the live draft and hit send.
+            </small>
+          </div>
+
+          <div class="webhook-test-results hidden" id="webhookTestResult"></div>
         </div>
 
-        <div class="form-group">
-          <label for="reminderTimeInput">Daily Dispatch Reminder Time (24h format)</label>
-          <input type="time" id="reminderTimeInput" class="input-field" value="18:28">
-          <small class="form-help">
-            The dashboard will alert you at <strong>6:28 PM</strong> (or your set time) to review the live draft and click send.
-          </small>
-        </div>
+        <!-- Sub-Tab 2: Employee Passwords & Access -->
+        <div id="settings-passwords-tab" class="settings-tab-pane">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div>
+              <strong style="font-size: 0.9rem; color: #f8fafc;">Team Member Passcodes</strong>
+              <p style="font-size: 0.76rem; color: #94a3b8;">Share each passcode with the employee. Once they log in on <a href="/submit" target="_blank" style="color:#38bdf8;">/submit</a>, their identity is locked to prevent submitting for others.</p>
+            </div>
+            <button type="button" id="btnCopyAllPasscodes" class="btn btn-xs btn-outline">📋 Copy All Passcodes</button>
+          </div>
 
-        <div class="webhook-test-results hidden" id="webhookTestResult"></div>
+          <div class="user-passwords-list" id="userPasswordsList">
+            <!-- Dynamically rendered employee credentials list -->
+          </div>
+        </div>
       </div>
 
       <div class="modal-footer">

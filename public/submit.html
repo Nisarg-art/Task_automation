@@ -3,190 +3,347 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Status Submission | Scrum Master Portal</title>
+  <title>Daily Status Portal | Developer & Designer Submission</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <style>
-    .submit-page-wrap {
-      max-width: 720px;
-      margin: 30px auto;
-      width: 100%;
-      padding: 0 16px;
+    body {
+      background: radial-gradient(circle at 50% 0%, #172540 0%, #080d1a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
     }
-    .submit-card {
-      background: var(--bg-card);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-lg);
-      padding: 28px;
-      box-shadow: var(--shadow-lg);
+    .submit-page-wrap {
+      max-width: 680px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .portal-card {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .portal-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 18px;
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: #f8fafc;
+    }
+    .brand-subtitle {
+      font-size: 0.76rem;
+      color: #94a3b8;
+    }
+    .user-pill-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 6px 12px;
+      border-radius: 20px;
+    }
+    .user-name-badge {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .btn-logout {
+      background: transparent;
+      border: none;
+      color: #ef4444;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .btn-logout:hover {
+      background: rgba(239, 68, 68, 0.15);
+    }
+    .login-box {
       display: flex;
       flex-direction: column;
       gap: 18px;
     }
-    .submit-header {
+    .login-header {
       text-align: center;
+      margin-bottom: 4px;
+    }
+    .login-header h2 {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+    .login-header p {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    .auth-error-banner {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .auth-error-banner.hidden { display: none; }
+    .form-group-item {
       display: flex;
       flex-direction: column;
-      align-items: center;
       gap: 6px;
     }
-    .portal-logo {
-      width: 46px;
-      height: 46px;
-      border-radius: 12px;
-      background: var(--accent-gradient);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      margin-bottom: 2px;
-    }
-    .submit-title {
-      font-size: 1.35rem;
-      font-weight: 800;
-      color: var(--text-primary);
-    }
-    .submit-desc {
-      font-size: 0.83rem;
-      color: var(--text-secondary);
-      line-height: 1.4;
-    }
-    .submit-form {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .form-label {
-      font-size: 0.84rem;
+    .form-label-styled {
+      font-size: 0.82rem;
       font-weight: 700;
-      color: var(--text-primary);
-      margin-bottom: 4px;
-      display: block;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
     }
-    .form-control {
+    .form-input-styled {
       width: 100%;
       background: #080d17;
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-md);
-      color: var(--text-primary);
-      padding: 9px 12px;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      color: #f8fafc;
+      padding: 11px 14px;
       font-size: 0.88rem;
       font-family: var(--font-main);
       outline: none;
-      transition: border-color 0.2s;
+      transition: all 0.2s;
     }
-    .form-control:focus {
-      border-color: var(--accent-primary);
+    .form-input-styled:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
     }
-    .tasks-textarea {
-      min-height: 140px;
+    .tasks-textarea-styled {
+      min-height: 120px;
       font-family: var(--font-mono);
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       line-height: 1.5;
     }
-    .projects-container {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .project-card-block {
-      background: #111a2a;
-      border: 1px solid #1f2f47;
-      border-radius: var(--radius-md);
+    .project-card-item {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
       position: relative;
     }
-    .project-card-header {
+    .project-card-item-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .project-badge-tag {
-      font-size: 0.75rem;
+    .proj-badge-pill {
+      font-size: 0.74rem;
       font-weight: 700;
-      color: #38bdf8;
+      color: #60a5fa;
       text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
-    .btn-add-project {
-      align-self: flex-start;
-      border-style: dashed;
-      border-color: var(--accent-primary);
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.08);
+    .btn-add-proj-row {
+      border: 1px dashed rgba(59, 130, 246, 0.4);
+      background: rgba(59, 130, 246, 0.06);
+      color: #60a5fa;
       font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      align-self: flex-start;
+      transition: all 0.2s;
     }
-    .btn-add-project:hover {
-      background: rgba(56, 189, 248, 0.18);
-      border-color: #38bdf8;
+    .btn-add-proj-row:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: #60a5fa;
     }
-    .success-box {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid var(--success);
-      color: #34d399;
-      padding: 20px;
-      border-radius: var(--radius-md);
+    .success-confirmation-card {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: 14px;
+      padding: 24px 20px;
       text-align: center;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 10px;
     }
-    .success-box.hidden { display: none; }
+    .success-confirmation-card.hidden { display: none; }
+    .status-check-circle {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #34d399;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+    .locked-user-banner {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .locked-user-label {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .locked-user-val {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body class="dark-mode">
   <div class="submit-page-wrap">
-    <div class="submit-card">
-      <div class="submit-header">
-        <div class="portal-logo">🚀</div>
-        <h1 class="submit-title">Daily Task Submission</h1>
-        <p class="submit-desc">Submit your updates across one or multiple projects. It will automatically be sent to Sir at <strong>6:28 PM</strong>.</p>
-      </div>
-
-      <div id="successBox" class="success-box hidden">
-        <div style="font-size: 1.8rem;">🎉</div>
-        <strong id="successMsg" style="font-size: 1.1rem;">Update Submitted Successfully!</strong>
-        <p style="font-size: 0.85rem; color: #a7f3d0;">All your projects & tasks have been compiled into today's master status report.</p>
-        <button id="btnSubmitAnother" class="btn btn-sm btn-outline" style="margin-top: 10px;">Submit Another Update</button>
-      </div>
-
-      <form id="submissionForm" class="submit-form">
-        <div>
-          <label class="form-label" for="memberNameSelect">Your Name *</label>
-          <select id="memberNameSelect" class="form-control" required>
-            <option value="">-- Select Your Name --</option>
-            <option value="HARSHAD">HARSHAD</option>
-            <option value="KIRAN">KIRAN</option>
-            <option value="DHRUV">DHRUV</option>
-            <option value="PRANAV">PRANAV</option>
-            <option value="KARTIK">KARTIK</option>
-            <option value="DEVERSH">DEVERSH (Nodejs Developer)</option>
-            <option value="RADHEY">RADHEY (Nodejs Developer)</option>
-            <option value="AJAY">AJAY (Designer)</option>
-            <option value="HASTI">HASTI (Designer)</option>
-            <option value="NISARG">NISARG (QA & Scrum Master)</option>
-          </select>
+    <div class="portal-card">
+      
+      <!-- Top Brand Header -->
+      <div class="portal-top-bar">
+        <div class="brand-group">
+          <div class="brand-icon">🚀</div>
+          <div>
+            <div class="brand-title">Daily Status Portal</div>
+            <div class="brand-subtitle">Automated Scrum Aggregator</div>
+          </div>
         </div>
 
-        <div>
-          <label class="form-label">Projects & Tasks *</label>
-          <div id="projectsContainer" class="projects-container">
-            <!-- Dynamic Project Block 1 -->
-            <div class="project-card-block" data-index="0">
-              <div class="project-card-header">
-                <span class="project-badge-tag">Project #1</span>
+        <div id="loggedInHeaderPill" class="user-pill-header hidden">
+          <span class="user-name-badge" id="displayHeaderName">User</span>
+          <button type="button" class="btn-logout" id="btnLogoutUser" title="Log out from this device">Switch</button>
+        </div>
+      </div>
+
+      <!-- SECTION 1: AUTH LOGIN CARD (Shown if user not logged in) -->
+      <div id="loginSection" class="login-box">
+        <div class="login-header">
+          <h2>Team Member Authentication</h2>
+          <p>Sign in once with your employee password. Your browser will remain logged in automatically.</p>
+        </div>
+
+        <div id="loginErrorMsg" class="auth-error-banner hidden">
+          <span>⚠️</span> <span id="loginErrorText">Invalid password</span>
+        </div>
+
+        <form id="loginForm" class="login-box" style="gap: 14px;">
+          <div class="form-group-item">
+            <label class="form-label-styled" for="loginMemberSelect">Select Your Name *</label>
+            <select id="loginMemberSelect" class="form-input-styled" required>
+              <option value="">-- Choose Your Name --</option>
+              <option value="HARSHAD">HARSHAD</option>
+              <option value="KIRAN">KIRAN</option>
+              <option value="DHRUV">DHRUV</option>
+              <option value="PRANAV">PRANAV</option>
+              <option value="KARTIK">KARTIK</option>
+              <option value="DEVERSH">DEVERSH (Nodejs Developer)</option>
+              <option value="RADHEY">RADHEY (Nodejs Developer)</option>
+              <option value="AJAY">AJAY (Designer)</option>
+              <option value="HASTI">HASTI (Designer)</option>
+              <option value="NISARG">NISARG (QA & Scrum Master)</option>
+            </select>
+          </div>
+
+          <div class="form-group-item">
+            <label class="form-label-styled" for="loginPasswordInput">Employee Passcode / Password *</label>
+            <input type="password" id="loginPasswordInput" class="form-input-styled" placeholder="Enter your employee password" required autocomplete="current-password">
+            <small style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">
+              Contact Nisarg (Scrum Master) if you need your password reset.
+            </small>
+          </div>
+
+          <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-large" style="margin-top: 6px;">
+            🔓 Authenticate & Continue
+          </button>
+        </form>
+      </div>
+
+      <!-- SECTION 2: SUCCESS BANNER (Shown after submit) -->
+      <div id="successSection" class="success-confirmation-card hidden">
+        <div class="status-check-circle">✓</div>
+        <strong id="successHeaderTitle" style="font-size: 1.15rem; color: #34d399;">Tasks Submitted Successfully!</strong>
+        <p style="font-size: 0.85rem; color: #a7f3d0; max-width: 440px;" id="successSubDesc">
+          Your updates have been compiled into today's master status report.
+        </p>
+        <button id="btnSubmitAnotherTasks" class="btn btn-sm btn-outline" style="margin-top: 8px;">
+          Submit Another Project / Update
+        </button>
+      </div>
+
+      <!-- SECTION 3: AUTHENTICATED SUBMISSION FORM (Locked to logged-in user) -->
+      <form id="submissionForm" class="login-box hidden" style="gap: 16px;">
+        <!-- Locked Member Banner -->
+        <div class="locked-user-banner">
+          <div>
+            <div class="locked-user-label">Submitting as Verified Employee:</div>
+            <div class="locked-user-val" id="lockedMemberDisplay">HARSHAD</div>
+          </div>
+          <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch User</button>
+        </div>
+
+        <!-- Projects & Tasks Container -->
+        <div class="form-group-item">
+          <label class="form-label-styled">Projects & Tasks *</label>
+          <div id="projectsListContainer" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Project Card #1 -->
+            <div class="project-card-item" data-index="0">
+              <div class="project-card-item-header">
+                <span class="proj-badge-pill">Project #1</span>
               </div>
               <div>
-                <input type="text" class="form-control project-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
+                <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
               </div>
               <div>
-                <textarea class="form-control tasks-textarea project-tasks-input" placeholder="Tasks completed or in progress:
+                <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks completed or in progress:
 Tabbar UI => Done
 Add Vehicle Screen UI => Done
 Drive History G-Force Distribution Screen UI => WIP" required></textarea>
@@ -194,14 +351,15 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
             </div>
           </div>
 
-          <button type="button" id="btnAddProjectBlock" class="btn btn-sm btn-add-project" style="margin-top: 10px;">
-            + Add Another Project (For working on 2+ projects)
+          <button type="button" id="btnAddAnotherProjectBlock" class="btn-add-proj-row" style="margin-top: 10px;">
+            + Add Another Project (For working across 2+ projects)
           </button>
         </div>
 
-        <div>
-          <label class="form-label" for="noteSelect">Status / Attendance Note (Optional)</label>
-          <select id="noteSelect" class="form-control">
+        <!-- Attendance / Status Note -->
+        <div class="form-group-item">
+          <label class="form-label-styled" for="attendanceSelect">Attendance / Status Note (Optional)</label>
+          <select id="attendanceSelect" class="form-input-styled">
             <option value="">Full Day (Default)</option>
             <option value="ON HALF DAY">ON HALF DAY</option>
             <option value="ON LEAVE">ON LEAVE</option>
@@ -209,39 +367,144 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
           </select>
         </div>
 
-        <button type="submit" id="btnSubmitStatus" class="btn btn-primary btn-large" style="margin-top: 8px;">
+        <button type="submit" id="btnSubmitStatus" class="btn btn-primary btn-large" style="margin-top: 6px;">
           🚀 Submit Today's Tasks
         </button>
       </form>
+
     </div>
   </div>
 
   <script>
-    const form = document.getElementById('submissionForm');
-    const projectsContainer = document.getElementById('projectsContainer');
-    const btnAddProjectBlock = document.getElementById('btnAddProjectBlock');
-    const successBox = document.getElementById('successBox');
-    const successMsg = document.getElementById('successMsg');
-    const btnSubmitAnother = document.getElementById('btnSubmitAnother');
+    const AUTH_KEY = 'scrum_auth_user_v1';
+    
+    // DOM Elements
+    const loginSection = document.getElementById('loginSection');
+    const loginForm = document.getElementById('loginForm');
+    const loginMemberSelect = document.getElementById('loginMemberSelect');
+    const loginPasswordInput = document.getElementById('loginPasswordInput');
+    const loginErrorMsg = document.getElementById('loginErrorMsg');
+    const loginErrorText = document.getElementById('loginErrorText');
+    const btnLoginSubmit = document.getElementById('btnLoginSubmit');
 
-    let projectCount = 1;
+    const loggedInHeaderPill = document.getElementById('loggedInHeaderPill');
+    const displayHeaderName = document.getElementById('displayHeaderName');
+    const btnLogoutUser = document.getElementById('btnLogoutUser');
 
-    // Add another project block
-    btnAddProjectBlock.addEventListener('click', () => {
-      projectCount++;
+    const submissionForm = document.getElementById('submissionForm');
+    const lockedMemberDisplay = document.getElementById('lockedMemberDisplay');
+    const btnSwitchAccount = document.getElementById('btnSwitchAccount');
+    const projectsListContainer = document.getElementById('projectsListContainer');
+    const btnAddAnotherProjectBlock = document.getElementById('btnAddAnotherProjectBlock');
+    const attendanceSelect = document.getElementById('attendanceSelect');
+    const btnSubmitStatus = document.getElementById('btnSubmitStatus');
+
+    const successSection = document.getElementById('successSection');
+    const successHeaderTitle = document.getElementById('successHeaderTitle');
+    const successSubDesc = document.getElementById('successSubDesc');
+    const btnSubmitAnotherTasks = document.getElementById('btnSubmitAnotherTasks');
+
+    let projectIndexCount = 1;
+    let currentUser = null;
+
+    // Check existing stored login on load
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedAuth = localStorage.getItem(AUTH_KEY);
+      if (savedAuth) {
+        try {
+          currentUser = JSON.parse(savedAuth);
+          showSubmissionForm(currentUser);
+        } catch (e) {
+          showLoginForm();
+        }
+      } else {
+        showLoginForm();
+      }
+    });
+
+    function showLoginForm() {
+      currentUser = null;
+      localStorage.removeItem(AUTH_KEY);
+      loginSection.classList.remove('hidden');
+      submissionForm.classList.add('hidden');
+      successSection.classList.add('hidden');
+      loggedInHeaderPill.classList.add('hidden');
+      loginErrorMsg.classList.add('hidden');
+      loginPasswordInput.value = '';
+    }
+
+    function showSubmissionForm(user) {
+      currentUser = user;
+      loginSection.classList.add('hidden');
+      successSection.classList.add('hidden');
+      submissionForm.classList.remove('hidden');
+      loggedInHeaderPill.classList.remove('hidden');
+
+      displayHeaderName.textContent = user.name;
+      lockedMemberDisplay.textContent = user.role ? `${user.name} (${user.role})` : user.name;
+    }
+
+    // Handle Login Submit
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const member = loginMemberSelect.value;
+      const password = loginPasswordInput.value;
+
+      if (!member || !password) return;
+
+      btnLoginSubmit.disabled = true;
+      btnLoginSubmit.textContent = 'Authenticating...';
+      loginErrorMsg.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ member, password })
+        });
+        const data = await res.json();
+
+        if (data.success && data.user) {
+          const authData = {
+            name: data.user.name,
+            role: data.user.role || '',
+            token: data.token
+          };
+          localStorage.setItem(AUTH_KEY, JSON.stringify(authData));
+          showSubmissionForm(authData);
+        } else {
+          loginErrorMsg.classList.remove('hidden');
+          loginErrorText.textContent = data.error || 'Incorrect password.';
+        }
+      } catch (err) {
+        loginErrorMsg.classList.remove('hidden');
+        loginErrorText.textContent = 'Connection error: ' + err.message;
+      } finally {
+        btnLoginSubmit.disabled = false;
+        btnLoginSubmit.textContent = '🔓 Authenticate & Continue';
+      }
+    });
+
+    // Logout / Switch
+    btnLogoutUser.addEventListener('click', showLoginForm);
+    btnSwitchAccount.addEventListener('click', showLoginForm);
+
+    // Add Project Card Block
+    btnAddAnotherProjectBlock.addEventListener('click', () => {
+      projectIndexCount++;
       const block = document.createElement('div');
-      block.className = 'project-card-block';
-      block.setAttribute('data-index', projectCount - 1);
+      block.className = 'project-card-item';
+      block.setAttribute('data-index', projectIndexCount - 1);
       block.innerHTML = `
-        <div class="project-card-header">
-          <span class="project-badge-tag">Project #${projectCount}</span>
-          <button type="button" class="btn btn-xs btn-ghost text-red btn-remove-proj">&times; Remove Project</button>
+        <div class="project-card-item-header">
+          <span class="proj-badge-pill">Project #${projectIndexCount}</span>
+          <button type="button" class="btn btn-xs btn-ghost text-red btn-remove-proj">&times; Remove</button>
         </div>
         <div>
-          <input type="text" class="form-control project-name-input" placeholder="Project Name (e.g. Second Number App, BeForever app)" required>
+          <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. Second Number App, BeForever app)" required>
         </div>
         <div>
-          <textarea class="form-control tasks-textarea project-tasks-input" placeholder="Tasks for this project:
+          <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks for this project:
 Fix bugs (4) => Done
 Upload new build => Done" required></textarea>
         </div>
@@ -251,22 +514,24 @@ Upload new build => Done" required></textarea>
         block.remove();
       });
 
-      projectsContainer.appendChild(block);
+      projectsListContainer.appendChild(block);
     });
 
-    // Handle Form Submit
-    form.addEventListener('submit', async (e) => {
+    // Handle Status Form Submit
+    submissionForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const member = document.getElementById('memberNameSelect').value;
-      const note = document.getElementById('noteSelect').value.trim();
+      if (!currentUser || !currentUser.name) {
+        showLoginForm();
+        return;
+      }
 
-      // Collect all projects
-      const projectBlocks = document.querySelectorAll('.project-card-block');
+      const note = attendanceSelect.value.trim();
+      const projectBlocks = document.querySelectorAll('.project-card-item');
       const projects = [];
 
       projectBlocks.forEach(block => {
-        const pName = block.querySelector('.project-name-input').value.trim();
-        const pTasks = block.querySelector('.project-tasks-input').value.trim();
+        const pName = block.querySelector('.proj-name-input').value.trim();
+        const pTasks = block.querySelector('.proj-tasks-input').value.trim();
         if (pName && pTasks) {
           projects.push({ name: pName, tasks: pTasks });
         }
@@ -277,52 +542,61 @@ Upload new build => Done" required></textarea>
         return;
       }
 
-      const btn = document.getElementById('btnSubmitStatus');
-      btn.disabled = true;
-      btn.textContent = 'Submitting...';
+      btnSubmitStatus.disabled = true;
+      btnSubmitStatus.textContent = 'Submitting...';
 
       try {
         const res = await fetch('/api/submit-task', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ member, projects, note })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.token || ''}`
+          },
+          body: JSON.stringify({
+            member: currentUser.name,
+            projects,
+            note,
+            token: currentUser.token
+          })
         });
+
         const data = await res.json();
         if (data.success) {
-          form.classList.add('hidden');
-          successBox.classList.remove('hidden');
-          successMsg.textContent = `✓ Thanks ${member}! Your status for ${projects.length} project(s) has been recorded.`;
+          submissionForm.classList.add('hidden');
+          successSection.classList.remove('hidden');
+          successHeaderTitle.textContent = `✓ Thanks, ${currentUser.name}!`;
+          successSubDesc.textContent = `Your tasks across ${projects.length} project(s) have been successfully compiled for today's 6:28 PM report.`;
         } else {
-          alert('Error: ' + data.error);
+          alert('Submission Error: ' + data.error);
         }
       } catch (err) {
-        alert('Submission failed: ' + err.message);
+        alert('Submission Failed: ' + err.message);
       } finally {
-        btn.disabled = false;
-        btn.textContent = '🚀 Submit Today\'s Tasks';
+        btnSubmitStatus.disabled = false;
+        btnSubmitStatus.textContent = '🚀 Submit Today\'s Tasks';
       }
     });
 
-    btnSubmitAnother.addEventListener('click', () => {
-      successBox.classList.add('hidden');
-      form.classList.remove('hidden');
-      // Reset to 1 block
-      projectsContainer.innerHTML = `
-        <div class="project-card-block" data-index="0">
-          <div class="project-card-header">
-            <span class="project-badge-tag">Project #1</span>
+    btnSubmitAnotherTasks.addEventListener('click', () => {
+      successSection.classList.add('hidden');
+      submissionForm.classList.remove('hidden');
+      // Reset projects to 1
+      projectsListContainer.innerHTML = `
+        <div class="project-card-item" data-index="0">
+          <div class="project-card-item-header">
+            <span class="proj-badge-pill">Project #1</span>
           </div>
           <div>
-            <input type="text" class="form-control project-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
+            <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
           </div>
           <div>
-            <textarea class="form-control tasks-textarea project-tasks-input" placeholder="Tasks completed or in progress:
+            <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks completed or in progress:
 Tabbar UI => Done
 Add Vehicle Screen UI => Done" required></textarea>
           </div>
         </div>
       `;
-      projectCount = 1;
+      projectIndexCount = 1;
     });
   </script>
 </body>

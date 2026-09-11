@@ -412,14 +412,123 @@ Drive History G-Force Distribution Screen UI => WIP`;
       saveTodayDraft();
       showToast('Cleared today\'s report draft', 'info');
     }
+  // Settings Sub-Tabs
+  document.querySelectorAll('.settings-tab-btn').forEach(tabBtn => {
+    tabBtn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.remove('active'));
+      tabBtn.classList.add('active');
+      const targetId = tabBtn.getAttribute('data-target');
+      const targetPane = document.getElementById(targetId);
+      if (targetPane) targetPane.classList.add('active');
+
+      if (targetId === 'settings-passwords-tab') {
+        loadUserPasswords();
+      }
+    });
   });
+
+  // Copy All Passcodes Button
+  const btnCopyAllPasscodes = document.getElementById('btnCopyAllPasscodes');
+  if (btnCopyAllPasscodes) {
+    btnCopyAllPasscodes.addEventListener('click', copyAllPasscodes);
+  }
 }
 
-function openSettingsModal() {
+async function openSettingsModal() {
   webhookUrlInput.value = state.webhookUrl || '';
   reminderTimeInput.value = state.reminderTime || '18:28';
   webhookTestResult.classList.add('hidden');
   settingsModal.classList.remove('hidden');
+  await loadUserPasswords();
+}
+
+let cachedUsers = [];
+
+async function loadUserPasswords() {
+  const container = document.getElementById('userPasswordsList');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/users');
+    const data = await res.json();
+    if (data.success && Array.isArray(data.users)) {
+      cachedUsers = data.users;
+      renderUserPasswordsList(data.users);
+    }
+  } catch (e) {
+    console.error('Failed to load user passwords:', e);
+  }
+}
+
+function renderUserPasswordsList(users) {
+  const container = document.getElementById('userPasswordsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  users.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'user-password-row';
+
+    const info = document.createElement('div');
+    info.className = 'user-password-info';
+
+    const name = document.createElement('span');
+    name.className = 'user-pw-name';
+    name.textContent = u.name;
+    info.appendChild(name);
+
+    if (u.role) {
+      const role = document.createElement('span');
+      role.className = 'role-tag-badge';
+      role.textContent = u.role;
+      info.appendChild(role);
+    }
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'user-pw-input-wrap';
+
+    const passInput = document.createElement('input');
+    passInput.type = 'text';
+    passInput.className = 'user-pw-field';
+    passInput.value = u.password || '';
+    passInput.setAttribute('data-id', u.id);
+    passInput.addEventListener('input', (e) => {
+      u.password = e.target.value.trim();
+    });
+
+    const btnCopyOne = document.createElement('button');
+    btnCopyOne.type = 'button';
+    btnCopyOne.className = 'btn btn-xs btn-ghost';
+    btnCopyOne.title = `Copy passcode for ${u.name}`;
+    btnCopyOne.textContent = '📋';
+    btnCopyOne.addEventListener('click', () => {
+      const textToCopy = `Hi ${u.name}, your Daily Status portal link is: ${window.location.origin}/submit\nYour Passcode is: ${u.password}`;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast(`Copied login credentials for ${u.name}!`, 'success');
+      });
+    });
+
+    inputWrap.appendChild(passInput);
+    inputWrap.appendChild(btnCopyOne);
+
+    row.appendChild(info);
+    row.appendChild(inputWrap);
+    container.appendChild(row);
+  });
+}
+
+function copyAllPasscodes() {
+  if (cachedUsers.length === 0) return;
+  let text = `🔐 TEAM MEMBER PORTAL CREDENTIALS\nSubmit Link: ${window.location.origin}/submit\n\n`;
+  cachedUsers.forEach(u => {
+    let roleStr = u.role ? ` (${u.role})` : '';
+    text += `• ${u.name}${roleStr} ➔ Passcode: ${u.password}\n`;
+  });
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('📋 Copied all employee credentials to clipboard!', 'success');
+  });
 }
 
 // -----------------------------------------------------------------------------
@@ -487,13 +596,15 @@ function getDefaultProjectForMember(name) {
 }
 
 // -----------------------------------------------------------------------------
-// Submission Tracker Checklist
+// Submission Tracker Checklist (Clean & Uncluttered: Grey when Pending, Green when Submitted)
 // -----------------------------------------------------------------------------
 function renderChecklistTracker() {
   rosterPills.innerHTML = '';
   let submittedCount = 0;
 
-  const currentNames = state.teamData.map(m => m.name.toUpperCase());
+  const currentNames = state.teamData
+    .filter(m => m.projects && m.projects.length > 0 && m.projects.some(p => p.tasks && p.tasks.length > 0))
+    .map(m => (m.name || '').toUpperCase().trim());
 
   DEFAULT_TEAM_ROSTER.forEach(member => {
     const isSubmitted = currentNames.includes(member.name.toUpperCase());
@@ -502,9 +613,8 @@ function renderChecklistTracker() {
     const pill = document.createElement('div');
     pill.className = `roster-pill ${isSubmitted ? 'submitted' : 'pending'}`;
     pill.innerHTML = `
-      <span class="pill-dot ${isSubmitted ? 'green' : 'yellow'}"></span>
+      <span class="pill-dot ${isSubmitted ? 'green' : 'grey'}"></span>
       <span>${member.name}</span>
-      <span style="font-size:0.7rem; opacity:0.8">${isSubmitted ? '✓' : 'pending'}</span>
     `;
 
     pill.addEventListener('click', () => {
@@ -515,22 +625,6 @@ function renderChecklistTracker() {
     });
 
     rosterPills.appendChild(pill);
-  });
-
-  // Any custom members not in default roster
-  state.teamData.forEach(member => {
-    const isDefault = DEFAULT_TEAM_ROSTER.some(r => r.name.toUpperCase() === member.name.toUpperCase());
-    if (!isDefault) {
-      submittedCount++;
-      const pill = document.createElement('div');
-      pill.className = 'roster-pill submitted';
-      pill.innerHTML = `
-        <span class="pill-dot green"></span>
-        <span>${member.name}</span>
-        <span style="font-size:0.7rem; opacity:0.8">✓</span>
-      `;
-      rosterPills.appendChild(pill);
-    }
   });
 
   trackerCount.textContent = `${submittedCount} / ${DEFAULT_TEAM_ROSTER.length} Received`;
@@ -1063,13 +1157,23 @@ async function saveConfig() {
       body: JSON.stringify({ webhookUrl: url, reminderTime: time })
     });
     const data = await res.json();
+
+    // Also update users if loaded
+    if (cachedUsers && cachedUsers.length > 0) {
+      await fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: cachedUsers })
+      });
+    }
+
     if (data.success) {
       state.webhookUrl = url;
       state.reminderTime = time;
       displayReminderTime.textContent = formatTimeDisplay(time);
       updateWebhookStatus(Boolean(url));
       settingsModal.classList.add('hidden');
-      showToast('Settings saved successfully!', 'success');
+      showToast('Settings & Passwords saved successfully!', 'success');
     }
   } catch (err) {
     showToast('Error saving settings: ' + err.message, 'error');

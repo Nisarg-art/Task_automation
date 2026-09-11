@@ -16,10 +16,6 @@
             {
               "text": "Add Vehicle Screen UI",
               "status": "Done"
-            },
-            {
-              "text": "Drive History G-Force Distribution Screen UI",
-              "status": "WIP"
             }
           ]
         }
@@ -36,10 +32,6 @@
             {
               "text": "Fix bugs (3)",
               "status": "Done"
-            },
-            {
-              "text": "Change image issue",
-              "status": "Done"
             }
           ]
         },
@@ -48,10 +40,6 @@
           "tasks": [
             {
               "text": "Fix bugs (4)",
-              "status": "Done"
-            },
-            {
-              "text": "Upload new build",
               "status": "Done"
             }
           ]
@@ -62,90 +50,41 @@
             {
               "text": "Add premium flow",
               "status": "Done"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "SECOND NUMBER APP",
-      "role": "",
-      "note": "",
-      "projects": [
-        {
-          "name": "General Tasks",
-          "tasks": [
-            {
-              "raw": "Fix bugs (4) => Done",
-              "text": "Fix bugs (4)",
-              "status": "Done"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "SWEET SANTA APP",
-      "role": "",
-      "note": "",
-      "projects": [
-        {
-          "name": "General Tasks",
-          "tasks": [
-            {
-              "raw": "Add premium flow => Done",
-              "text": "Add premium flow",
-              "status": "Done"
             },
             {
-              "raw": "Add new build => Done",
               "text": "Add new build",
               "status": "Done"
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "THE CRYSTAL WISH APP",
-      "role": "",
-      "note": "",
-      "projects": [
+        },
         {
-          "name": "General Tasks",
+          "name": "The Crystal Wish App",
           "tasks": [
             {
-              "raw": "Project setup => Done",
               "text": "Project setup",
               "status": "Done"
             },
             {
-              "raw": "Estimate sheet => Done",
               "text": "Estimate sheet",
               "status": "Done"
             },
             {
-              "raw": "Add task in freedcamp => Done",
               "text": "Add task in freedcamp",
               "status": "Done"
             },
             {
-              "raw": "Splash screen => Done",
               "text": "Splash screen",
               "status": "Done"
             },
             {
-              "raw": "No internet screen => Done",
               "text": "No internet screen",
               "status": "Done"
             },
             {
-              "raw": "Add packages => Done",
               "text": "Add packages",
               "status": "Done"
             },
             {
-              "raw": "Onboarding first => Done",
               "text": "Onboarding first",
               "status": "Done"
             }
@@ -183,22 +122,19 @@
       "note": "",
       "projects": [
         {
-          "name": "HP",
+          "name": "Happy Reward's Dashboard Application",
           "tasks": [
             {
-              "text": "1. Development Progress",
+              "text": "Enhanced and optimized the overall Dashboard UI/UX, improving usability, consistency, intuitive navigation, and overall user experience. Completed and successfully deployed the updated dashboard at https://happy-rewards-frontend.vercel.app .",
               "status": "Done"
-            },
+            }
+          ]
+        },
+        {
+          "name": "Happy Reward's INGENICO Application",
+          "tasks": [
             {
               "text": "Actively developing the Happy Rewards application for Ingenico AXIUM payment terminals, implementing SDK integrations, payment workflows, device capabilities, and security architecture !",
-              "status": "Done"
-            },
-            {
-              "text": "2. Metting :",
-              "status": "Done"
-            },
-            {
-              "text": "Engaged in a productive discussion with Samkit Bhai regarding Happy Reward's Clover Application ( 30 Min ) !",
               "status": "Done"
             }
           ]
@@ -214,46 +150,28 @@
           "name": "Happy Reward Shopify",
           "tasks": [
             {
-              "raw": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension => Done",
               "text": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension",
               "status": "Done"
             },
             {
-              "raw": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality => Done",
               "text": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality",
               "status": "Done"
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "HAMILTON DABBAWALA",
-      "role": "",
-      "note": "",
-      "projects": [
+        },
         {
-          "name": "General Tasks",
+          "name": "Hamilton Dabbawala",
           "tasks": [
             {
-              "raw": "Investigated and verified the issue where Membership visits were not being deducted properly => Done",
               "text": "Investigated and verified the issue where Membership visits were not being deducted properly",
               "status": "Done"
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "VIP CANNABIS",
-      "role": "",
-      "note": "",
-      "projects": [
+        },
         {
-          "name": "General Tasks",
+          "name": "VIP Cannabis",
           "tasks": [
             {
-              "raw": "Added and configured background synchronization scripts on the server to sync all Orders and Products automatically => Done",
               "text": "Added and configured background synchronization scripts on the server to sync all Orders and Products automatically",
               "status": "Done"
             }
@@ -270,32 +188,26 @@
           "name": "SEC EDGAR Terminal",
           "tasks": [
             {
-              "raw": "Update TradeDetailModal styles and improve accessibility => Done",
               "text": "Update TradeDetailModal styles and improve accessibility",
               "status": "Done"
             },
             {
-              "raw": "Update ingestion status timestamps and remove unused section from LandingPage => Done",
               "text": "Update ingestion status timestamps and remove unused section from LandingPage",
               "status": "Done"
             },
             {
-              "raw": "Simplify active watchlist handling and clean up unused code in WatchlistManagementView => Done",
               "text": "Simplify active watchlist handling and clean up unused code in WatchlistManagementView",
               "status": "Done"
             },
             {
-              "raw": "Implement robust Stripe webhook handling and plan synchronization logic => Done",
               "text": "Implement robust Stripe webhook handling and plan synchronization logic",
               "status": "Done"
             },
             {
-              "raw": "PlanGuard logic to support free tier and refine billing access test cases => Done",
               "text": "PlanGuard logic to support free tier and refine billing access test cases",
               "status": "Done"
             },
             {
-              "raw": "Subscription cancellation endpoint, improve trial status logic, and allow deletion of final watchlist => Done",
               "text": "Subscription cancellation endpoint, improve trial status logic, and allow deletion of final watchlist",
               "status": "Done"
             }
@@ -312,19 +224,23 @@
           "name": "AI-powered SEO/marketing platform",
           "tasks": [
             {
-              "text": "Explore and understand Google ads api  : In-progress",
+              "text": "Merge all changes of Social module to main and deploy on vercel",
               "status": "Done"
             },
             {
-              "text": "Implement and test Google and Meta ads oauth connection",
+              "text": "Analyze Search Atlas Ads Module and Investigate Its Internal Workflows",
               "status": "Done"
             },
             {
-              "text": "Resolve Google Ads API Access Issues and Account Authorization Errors",
+              "text": "Understand how google ads works",
               "status": "Done"
             },
             {
-              "text": "Build Initial Google & Meta Ads Manager Functionality : In-progress",
+              "text": "Plan entire Architecture and list all features of ad module",
+              "status": "Done"
+            },
+            {
+              "text": "Explore and understand Google ads api",
               "status": "Done"
             }
           ]
@@ -334,17 +250,17 @@
     {
       "name": "AJAY",
       "role": "Designer",
-      "note": "ON HALF DAY",
+      "note": "",
       "projects": [
         {
           "name": "Alarm App",
           "tasks": [
             {
-              "text": "New sound effects",
+              "text": "Alarm Screen with multiple themes",
               "status": "Done"
             },
             {
-              "text": "Snooze setting",
+              "text": "Habit Alarm Module",
               "status": "WIP"
             }
           ]
@@ -357,35 +273,22 @@
       "note": "",
       "projects": [
         {
-          "name": "Extra Task",
+          "name": "AI Life Mentor",
           "tasks": [
             {
-              "text": "AI Onboarding Screen",
-              "status": "Done"
-            },
-            {
-              "text": "AI Models for Figma",
+              "text": "Edit App Flow",
               "status": "Done"
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "EXTRA TASK",
-      "role": "",
-      "note": "",
-      "projects": [
+        },
         {
           "name": "General Tasks",
           "tasks": [
             {
-              "raw": "Exploring Figma Agent => Done",
               "text": "Exploring Figma Agent",
               "status": "Done"
             },
             {
-              "raw": "AI Models for Design => Done",
               "text": "AI Models for Design",
               "status": "Done"
             }
@@ -399,19 +302,18 @@
       "note": "",
       "projects": [
         {
-          "name": "second number",
+          "name": "General Tasks",
           "tasks": [
             {
-              "text": "this is second number app",
+              "text": "Do regression testing on PrivateLine second number app",
               "status": "Done"
-            }
-          ]
-        },
-        {
-          "name": "santa",
-          "tasks": [
+            },
             {
-              "text": "testing",
+              "text": "Do UI testing on FirstText app and raised a bug in freedcamp",
+              "status": "Done"
+            },
+            {
+              "text": "Discussed the issues I faced in the GLP-1 Tracker app with Dhruv",
               "status": "Done"
             }
           ]
@@ -419,5 +321,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-10T11:37:58.837Z"
+  "lastUpdated": "2026-09-11T09:00:00.000Z"
 }
