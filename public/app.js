@@ -412,6 +412,8 @@ Drive History G-Force Distribution Screen UI => WIP`;
       saveTodayDraft();
       showToast('Cleared today\'s report draft', 'info');
     }
+  });
+
   // Settings Sub-Tabs
   document.querySelectorAll('.settings-tab-btn').forEach(tabBtn => {
     tabBtn.addEventListener('click', () => {

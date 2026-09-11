@@ -259,24 +259,16 @@
     "timestamp": "2026-09-11T16:20:00.000Z"
   },
   {
-    "id": "sub-1726055400009-nisarg",
+    "id": "sub-1789118071063-bmv34",
     "member": "NISARG",
     "role": "QA & Scrum Master",
     "note": "",
     "projects": [
       {
-        "name": "General Tasks",
+        "name": "second number app",
         "tasks": [
           {
-            "text": "Do regression testing on PrivateLine second number app",
-            "status": "Done"
-          },
-          {
-            "text": "Do UI testing on FirstText app and raised a bug in freedcamp",
-            "status": "Done"
-          },
-          {
-            "text": "Discussed the issues I faced in the GLP-1 Tracker app with Dhruv",
+            "text": "retest the all bugs",
             "status": "Done"
           }
         ]
@@ -284,7 +276,7 @@
     ],
     "date": "11/09/2026",
     "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T16:25:00.000Z"
+    "timestamp": "2026-09-11T09:14:31.063Z"
   },
   {
     "id": "sub-1725969000000-harshad-10",

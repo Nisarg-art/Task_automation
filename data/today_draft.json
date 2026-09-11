@@ -302,18 +302,10 @@
       "note": "",
       "projects": [
         {
-          "name": "General Tasks",
+          "name": "second number app",
           "tasks": [
             {
-              "text": "Do regression testing on PrivateLine second number app",
-              "status": "Done"
-            },
-            {
-              "text": "Do UI testing on FirstText app and raised a bug in freedcamp",
-              "status": "Done"
-            },
-            {
-              "text": "Discussed the issues I faced in the GLP-1 Tracker app with Dhruv",
+              "text": "retest the all bugs",
               "status": "Done"
             }
           ]
