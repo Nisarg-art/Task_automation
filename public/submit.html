@@ -317,8 +317,8 @@
         </div>
 
         <div id="loggedInHeaderPill" class="user-pill-header hidden">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
           <span class="user-name-badge" id="displayHeaderName">User</span>
-          <button type="button" class="btn-logout" id="btnLogoutUser" title="Log out from this device">Switch</button>
         </div>
       </div>
 
@@ -385,7 +385,7 @@
             <div class="locked-user-label">Submitting as Verified Employee:</div>
             <div class="locked-user-val" id="lockedMemberDisplay">HARSHAD</div>
           </div>
-          <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch User</button>
+          <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch Account</button>
         </div>
 
         <!-- 6:28 PM Cutoff Lock Banner -->
@@ -462,14 +462,12 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           </button>
         </div>
 
-        <!-- Attendance / Status Note -->
+        <!-- Attendance / Status Note (Only 2 options: Full Day and ON HALF DAY) -->
         <div class="form-group-item">
           <label class="form-label-styled" for="attendanceSelect">Attendance / Status Note (Optional)</label>
           <select id="attendanceSelect" class="form-input-styled">
             <option value="">Full Day (Default)</option>
             <option value="ON HALF DAY">ON HALF DAY</option>
-            <option value="ON LEAVE">ON LEAVE</option>
-            <option value="WORK FROM HOME">WORK FROM HOME</option>
           </select>
         </div>
 
@@ -669,8 +667,8 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     });
 
     // Handle Logout / Switch
-    btnLogoutUser.addEventListener('click', showLoginForm);
-    btnSwitchAccount.addEventListener('click', showLoginForm);
+    if (btnLogoutUser) btnLogoutUser.addEventListener('click', showLoginForm);
+    if (btnSwitchAccount) btnSwitchAccount.addEventListener('click', showLoginForm);
 
     // Add Dynamic Project Block in Cards Mode
     btnAddAnotherProjectBlock.addEventListener('click', () => {

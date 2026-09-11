@@ -1059,9 +1059,7 @@ function renderBuilder() {
     noteSelect.className = 'input-field input-role';
     const noteOptions = [
       { label: 'Full Day', val: '' },
-      { label: 'ON HALF DAY', val: 'ON HALF DAY' },
-      { label: 'ON LEAVE', val: 'ON LEAVE' },
-      { label: 'WORK FROM HOME', val: 'WORK FROM HOME' }
+      { label: 'ON HALF DAY', val: 'ON HALF DAY' }
     ];
     noteOptions.forEach(opt => {
       const optEl = document.createElement('option');
