@@ -417,38 +417,66 @@ app.post('/api/submit-task', (req, res) => {
     const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
     draft.date = todayDate;
 
-    function parseTaskLines(taskStr) {
-      return (taskStr || '').split('\n')
-        .map(l => l.trim())
-        .filter(l => l.length > 0)
-        .map(line => {
-          let clean = line.replace(/^[-•*]\s+/, '').trim();
+    function parseRawMemberInput(rawText, defaultProjectName = 'General Tasks') {
+      if (!rawText || !rawText.trim()) return [];
+      const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const projList = [];
+      let curProj = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
+        const isBullet = /^[-•*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line);
+        const isExplicitHeader = /[:-]+$/.test(line) && !hasStatus;
+        const isProjectHeader = isExplicitHeader || (!hasStatus && !isBullet && line.length < 80);
+
+        if (isProjectHeader) {
+          let cleanProjName = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
+          curProj = {
+            name: cleanProjName || defaultProjectName,
+            tasks: []
+          };
+          projList.push(curProj);
+        } else {
+          if (!curProj) {
+            curProj = { name: defaultProjectName, tasks: [] };
+            projList.push(curProj);
+          }
+
+          let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
           let status = 'Done';
+
           if (/[-—–=>:]+\s*(wip|in\s*progress)/i.test(clean) || /\bWIP\b/i.test(clean)) {
             status = 'WIP';
             clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress)/i, '').replace(/\bWIP\b/i, '').trim();
-          } else if (/[-—–=>:]+\s*(done|completed)/i.test(clean) || /\bDone\b/i.test(clean)) {
+          } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
             status = 'Done';
-            clean = clean.replace(/[-—–=>:]+\s*(done|completed)/i, '').replace(/\bDone\b/i, '').trim();
+            clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
           }
-          return { text: clean || line, status };
-        });
+
+          clean = clean.replace(/[-—–=>:]+$/, '').trim();
+          if (clean) {
+            curProj.tasks.push({ text: clean, status });
+          }
+        }
+      }
+
+      return projList.filter(p => p.tasks && p.tasks.length > 0);
     }
 
     let parsedProjects = [];
 
-    if (Array.isArray(projects) && projects.length > 0) {
+    if (req.body.rawText) {
+      parsedProjects = parseRawMemberInput(req.body.rawText, project || 'General Tasks');
+    } else if (Array.isArray(projects) && projects.length > 0) {
       parsedProjects = projects.map(p => ({
         name: p.name ? p.name.trim() : 'General Tasks',
-        tasks: typeof p.tasks === 'string' ? parseTaskLines(p.tasks) : (p.tasks || [])
+        tasks: typeof p.tasks === 'string' 
+          ? parseRawMemberInput(p.tasks, p.name || 'General Tasks')[0]?.tasks || []
+          : (p.tasks || [])
       })).filter(p => p.tasks && p.tasks.length > 0);
     } else if (tasks) {
-      parsedProjects = [
-        {
-          name: project ? project.trim() : 'General Tasks',
-          tasks: parseTaskLines(tasks)
-        }
-      ];
+      parsedProjects = parseRawMemberInput(tasks, project || 'General Tasks');
     }
 
     if (parsedProjects.length === 0) {

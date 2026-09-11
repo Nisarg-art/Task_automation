@@ -241,6 +241,40 @@
       font-weight: 700;
       color: #38bdf8;
     }
+    .input-mode-switcher {
+      display: flex;
+      background: #090e1a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+    .input-mode-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .input-mode-btn:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .input-mode-btn.active {
+      background: #1e293b;
+      color: #38bdf8;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -330,8 +364,38 @@
           <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch User</button>
         </div>
 
-        <!-- Projects & Tasks Container -->
-        <div class="form-group-item">
+        <!-- Input Mode Switcher -->
+        <div class="input-mode-switcher">
+          <button type="button" class="input-mode-btn active" id="btnModeBulk">
+            ⚡ Quick Free-Form Paste (Easiest)
+          </button>
+          <button type="button" class="input-mode-btn" id="btnModeCards">
+            🗂️ Step-by-Step Fields
+          </button>
+        </div>
+
+        <!-- Mode 1: Bulk Free-Form Textarea (Default) -->
+        <div id="bulkInputWrap" class="form-group-item">
+          <label class="form-label-styled" for="bulkTasksInput">Paste Your Projects & Tasks *</label>
+          <textarea id="bulkTasksInput" class="form-input-styled tasks-textarea-styled" style="min-height: 220px;" placeholder="Paste all your projects and tasks directly here! Example:
+
+VIP Cannabis
+Configured and integrated the new Twilio number — DONE
+
+Universal Second Number
+Investigated and resolved the application error occurring while placing calls — DONE
+Implemented inbound call handling for low-credit users — DONE
+Added the necessary logs to simplify future debugging and troubleshooting — DONE
+
+Clover Reward Loyalty Dashboard
+Investigated the feasibility of adding a filter and implemented it if supported — Done"></textarea>
+          <small style="font-size: 0.76rem; color: #94a3b8; display: block; margin-top: 6px;">
+            💡 <strong>Smart Parser</strong>: Simply write the project name on one line, and write its tasks below it (with <code>— DONE</code>, <code>=> Done</code>, or <code>WIP</code>).
+          </small>
+        </div>
+
+        <!-- Mode 2: Step-by-Step Project Cards Container -->
+        <div id="cardsInputWrap" class="form-group-item hidden">
           <label class="form-label-styled">Projects & Tasks *</label>
           <div id="projectsListContainer" style="display: flex; flex-direction: column; gap: 12px;">
             <!-- Project Card #1 -->
@@ -340,13 +404,13 @@
                 <span class="proj-badge-pill">Project #1</span>
               </div>
               <div>
-                <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
+                <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)">
               </div>
               <div>
                 <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks completed or in progress:
 Tabbar UI => Done
 Add Vehicle Screen UI => Done
-Drive History G-Force Distribution Screen UI => WIP" required></textarea>
+Drive History G-Force Distribution Screen UI => WIP"></textarea>
               </div>
             </div>
           </div>
@@ -394,6 +458,15 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
     const submissionForm = document.getElementById('submissionForm');
     const lockedMemberDisplay = document.getElementById('lockedMemberDisplay');
     const btnSwitchAccount = document.getElementById('btnSwitchAccount');
+    
+    // Mode Switcher Elements
+    let currentInputMode = 'bulk';
+    const btnModeBulk = document.getElementById('btnModeBulk');
+    const btnModeCards = document.getElementById('btnModeCards');
+    const bulkInputWrap = document.getElementById('bulkInputWrap');
+    const cardsInputWrap = document.getElementById('cardsInputWrap');
+    const bulkTasksInput = document.getElementById('bulkTasksInput');
+
     const projectsListContainer = document.getElementById('projectsListContainer');
     const btnAddAnotherProjectBlock = document.getElementById('btnAddAnotherProjectBlock');
     const attendanceSelect = document.getElementById('attendanceSelect');
@@ -406,6 +479,23 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
 
     let projectIndexCount = 1;
     let currentUser = null;
+
+    // Mode Toggle Listeners
+    btnModeBulk.addEventListener('click', () => {
+      currentInputMode = 'bulk';
+      btnModeBulk.classList.add('active');
+      btnModeCards.classList.remove('active');
+      bulkInputWrap.classList.remove('hidden');
+      cardsInputWrap.classList.add('hidden');
+    });
+
+    btnModeCards.addEventListener('click', () => {
+      currentInputMode = 'cards';
+      btnModeCards.classList.add('active');
+      btnModeBulk.classList.remove('active');
+      cardsInputWrap.classList.remove('hidden');
+      bulkInputWrap.classList.add('hidden');
+    });
 
     // Check existing stored login on load
     document.addEventListener('DOMContentLoaded', () => {
@@ -448,12 +538,12 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const member = loginMemberSelect.value;
-      const password = loginPasswordInput.value;
+      const password = loginPasswordInput.value.trim();
 
       if (!member || !password) return;
 
       btnLoginSubmit.disabled = true;
-      btnLoginSubmit.textContent = 'Authenticating...';
+      btnLoginSubmit.textContent = 'Verifying...';
       loginErrorMsg.classList.add('hidden');
 
       try {
@@ -464,8 +554,9 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
         });
         const data = await res.json();
 
-        if (data.success && data.user) {
+        if (data.success && data.token) {
           const authData = {
+            id: data.user.id,
             name: data.user.name,
             role: data.user.role || '',
             token: data.token
@@ -474,7 +565,7 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
           showSubmissionForm(authData);
         } else {
           loginErrorMsg.classList.remove('hidden');
-          loginErrorText.textContent = data.error || 'Incorrect password.';
+          loginErrorText.textContent = data.error || 'Authentication failed.';
         }
       } catch (err) {
         loginErrorMsg.classList.remove('hidden');
@@ -485,11 +576,11 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
       }
     });
 
-    // Logout / Switch
+    // Handle Logout / Switch
     btnLogoutUser.addEventListener('click', showLoginForm);
     btnSwitchAccount.addEventListener('click', showLoginForm);
 
-    // Add Project Card Block
+    // Add Dynamic Project Block in Cards Mode
     btnAddAnotherProjectBlock.addEventListener('click', () => {
       projectIndexCount++;
       const block = document.createElement('div');
@@ -501,12 +592,12 @@ Drive History G-Force Distribution Screen UI => WIP" required></textarea>
           <button type="button" class="btn btn-xs btn-ghost text-red btn-remove-proj">&times; Remove</button>
         </div>
         <div>
-          <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. Second Number App, BeForever app)" required>
+          <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. Second Number App, BeForever app)">
         </div>
         <div>
           <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks for this project:
 Fix bugs (4) => Done
-Upload new build => Done" required></textarea>
+Upload new build => Done"></textarea>
         </div>
       `;
 
@@ -526,20 +617,43 @@ Upload new build => Done" required></textarea>
       }
 
       const note = attendanceSelect.value.trim();
-      const projectBlocks = document.querySelectorAll('.project-card-item');
-      const projects = [];
+      let submitPayload = null;
 
-      projectBlocks.forEach(block => {
-        const pName = block.querySelector('.proj-name-input').value.trim();
-        const pTasks = block.querySelector('.proj-tasks-input').value.trim();
-        if (pName && pTasks) {
-          projects.push({ name: pName, tasks: pTasks });
+      if (currentInputMode === 'bulk') {
+        const rawText = bulkTasksInput.value.trim();
+        if (!rawText) {
+          alert('Please paste or write your tasks before submitting.');
+          return;
         }
-      });
+        submitPayload = {
+          member: currentUser.name,
+          rawText: rawText,
+          note: note,
+          token: currentUser.token
+        };
+      } else {
+        const projectBlocks = document.querySelectorAll('.project-card-item');
+        const projects = [];
 
-      if (projects.length === 0) {
-        alert('Please fill in at least one project and tasks.');
-        return;
+        projectBlocks.forEach(block => {
+          const pName = block.querySelector('.proj-name-input').value.trim();
+          const pTasks = block.querySelector('.proj-tasks-input').value.trim();
+          if (pName && pTasks) {
+            projects.push({ name: pName, tasks: pTasks });
+          }
+        });
+
+        if (projects.length === 0) {
+          alert('Please fill in at least one project and tasks.');
+          return;
+        }
+
+        submitPayload = {
+          member: currentUser.name,
+          projects: projects,
+          note: note,
+          token: currentUser.token
+        };
       }
 
       btnSubmitStatus.disabled = true;
@@ -552,12 +666,7 @@ Upload new build => Done" required></textarea>
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${currentUser.token || ''}`
           },
-          body: JSON.stringify({
-            member: currentUser.name,
-            projects,
-            note,
-            token: currentUser.token
-          })
+          body: JSON.stringify(submitPayload)
         });
 
         const data = await res.json();
@@ -565,7 +674,7 @@ Upload new build => Done" required></textarea>
           submissionForm.classList.add('hidden');
           successSection.classList.remove('hidden');
           successHeaderTitle.textContent = `✓ Thanks, ${currentUser.name}!`;
-          successSubDesc.textContent = `Your tasks across ${projects.length} project(s) have been successfully compiled for today's 6:28 PM report.`;
+          successSubDesc.textContent = `Your tasks have been successfully compiled into today's 6:28 PM report in standard format.`;
         } else {
           alert('Submission Error: ' + data.error);
         }
@@ -580,23 +689,7 @@ Upload new build => Done" required></textarea>
     btnSubmitAnotherTasks.addEventListener('click', () => {
       successSection.classList.add('hidden');
       submissionForm.classList.remove('hidden');
-      // Reset projects to 1
-      projectsListContainer.innerHTML = `
-        <div class="project-card-item" data-index="0">
-          <div class="project-card-item-header">
-            <span class="proj-badge-pill">Project #1</span>
-          </div>
-          <div>
-            <input type="text" class="form-input-styled proj-name-input" placeholder="Project Name (e.g. RankMyTrip, Crystal Wish app)" required>
-          </div>
-          <div>
-            <textarea class="form-input-styled tasks-textarea-styled proj-tasks-input" placeholder="Tasks completed or in progress:
-Tabbar UI => Done
-Add Vehicle Screen UI => Done" required></textarea>
-          </div>
-        </div>
-      `;
-      projectIndexCount = 1;
+      bulkTasksInput.value = '';
     });
   </script>
 </body>

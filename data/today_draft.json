@@ -7,18 +7,104 @@
       "note": "",
       "projects": [
         {
-          "name": "rankmytrip",
+          "name": "General Tasks",
           "tasks": [
             {
-              "text": "create a home page UI",
+              "text": "Drive History Screen UI",
               "status": "Done"
             },
             {
-              "text": "onboarding page1",
+              "text": "Drive History G-Force Distribution Screen UI",
               "status": "Done"
             },
             {
-              "text": "onboarding 2",
+              "text": "Drive History Elevation Profile Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Drive Role Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Drive Vehicle Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Drive Vehicle Select Delete Combine Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Select vehicle Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Select Comnbine Confirmation Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Select Comnbine Success Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Delete Popup Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive History Start Manual Drive Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive Tracking Module Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive Tracking Speed Screen UI",
+              "status": "Done"
+            },
+            {
+              "text": "Drive Tracking Map Screen UI",
+              "status": "WIP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KARTIK",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "VIP Cannabis",
+          "tasks": [
+            {
+              "text": "Configured and integrated the new Twilio number",
+              "status": "Done"
+            }
+          ]
+        },
+        {
+          "name": "Universal Second Number",
+          "tasks": [
+            {
+              "text": "Investigated and resolved the application error occurring while placing calls",
+              "status": "Done"
+            },
+            {
+              "text": "Implemented inbound call handling for low-credit users, including disconnect recovery, user notification, and a prompt to purchase credits to receive calls",
+              "status": "Done"
+            },
+            {
+              "text": "Added the necessary logs to simplify future debugging and troubleshooting",
+              "status": "Done"
+            }
+          ]
+        },
+        {
+          "name": "Clover Reward Loyalty Dashboard",
+          "tasks": [
+            {
+              "text": "Investigated the feasibility of adding a filter and implemented it if supported",
               "status": "Done"
             }
           ]
