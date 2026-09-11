@@ -113,35 +113,6 @@
     "timestamp": "2026-09-11T09:32:46.397Z"
   },
   {
-    "id": "sub-1789119242314-i7m51",
-    "member": "KARTIK",
-    "role": "",
-    "note": "",
-    "projects": [
-      {
-        "name": "hamilton dabbawala",
-        "tasks": [
-          {
-            "text": "create an api for home page",
-            "status": "Done"
-          }
-        ]
-      },
-      {
-        "name": "shopify app",
-        "tasks": [
-          {
-            "text": "edit the product caatalog page",
-            "status": "Done"
-          }
-        ]
-      }
-    ],
-    "date": "11/09/2026",
-    "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T09:34:02.314Z"
-  },
-  {
     "id": "sub-1726055400005-deversh",
     "member": "DEVERSH",
     "role": "Nodejs Developer",

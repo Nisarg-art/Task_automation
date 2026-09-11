@@ -24,31 +24,6 @@
           ]
         }
       ]
-    },
-    {
-      "name": "KARTIK",
-      "role": "",
-      "note": "",
-      "projects": [
-        {
-          "name": "hamilton dabbawala",
-          "tasks": [
-            {
-              "text": "create an api for home page",
-              "status": "Done"
-            }
-          ]
-        },
-        {
-          "name": "shopify app",
-          "tasks": [
-            {
-              "text": "edit the product caatalog page",
-              "status": "Done"
-            }
-          ]
-        }
-      ]
     }
   ]
 }
