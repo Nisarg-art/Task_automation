@@ -13,6 +13,20 @@ const DEFAULT_TEAM_ROSTER = [
   { name: 'NISARG', role: 'QA & Scrum Master', defaultProject: 'General Tasks' }
 ];
 
+function sortTeamDataByRoster(teamData) {
+  if (!Array.isArray(teamData)) return [];
+  const rosterOrder = DEFAULT_TEAM_ROSTER.map(m => m.name.toUpperCase());
+  return [...teamData].sort((a, b) => {
+    const nameA = (a.name || a.member || '').toUpperCase().trim();
+    const nameB = (b.name || b.member || '').toUpperCase().trim();
+    let idxA = rosterOrder.indexOf(nameA);
+    let idxB = rosterOrder.indexOf(nameB);
+    if (idxA === -1) idxA = 999;
+    if (idxB === -1) idxB = 999;
+    return idxA - idxB;
+  });
+}
+
 const SAMPLE_09_09_TEXT = `HARSHAD:- RankMyTrip:-
 
 Tabbar UI => Done
@@ -224,10 +238,23 @@ const statProjects = document.getElementById('statProjects');
 const statDone = document.getElementById('statDone');
 const statWIP = document.getElementById('statWIP');
 
+// Admin Auth DOM Elements
+const ADMIN_AUTH_KEY = 'scrum_admin_auth_v1';
+const adminGateModal = document.getElementById('adminGateModal');
+const adminLoginForm = document.getElementById('adminLoginForm');
+const adminAuthPassword = document.getElementById('adminAuthPassword');
+const adminLoginError = document.getElementById('adminLoginError');
+const adminLoginErrorText = document.getElementById('adminLoginErrorText');
+const btnAdminLoginSubmit = document.getElementById('btnAdminLoginSubmit');
+const btnAdminLogout = document.getElementById('btnAdminLogout');
+const adminPasswordInputConfig = document.getElementById('adminPasswordInputConfig');
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   reportDateInput.value = state.date;
   if (historyDatePicker) historyDatePicker.value = state.filter.date;
+  
+  checkAdminAuth();
   await loadConfig();
   await loadHistory();
   await loadTodayDraft();
@@ -235,8 +262,67 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   setupEventListeners();
   setupFilterEventListeners();
+  setupAdminAuthListeners();
   startReminderClock();
 });
+
+function checkAdminAuth() {
+  const token = localStorage.getItem(ADMIN_AUTH_KEY);
+  if (!token) {
+    if (adminGateModal) adminGateModal.classList.remove('hidden');
+  } else {
+    if (adminGateModal) adminGateModal.classList.add('hidden');
+  }
+}
+
+function setupAdminAuthListeners() {
+  if (adminLoginForm) {
+    adminLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = adminAuthPassword.value.trim();
+      if (!password) return;
+
+      btnAdminLoginSubmit.disabled = true;
+      btnAdminLoginSubmit.textContent = 'Verifying...';
+      adminLoginError.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/auth/admin-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+
+        if (data.success && data.token) {
+          localStorage.setItem(ADMIN_AUTH_KEY, data.token);
+          adminGateModal.classList.add('hidden');
+          adminAuthPassword.value = '';
+          showToast('👑 Welcome back, Nisarg! Admin unlocked.', 'success');
+        } else {
+          adminLoginError.classList.remove('hidden');
+          adminLoginErrorText.textContent = data.error || 'Incorrect Admin password.';
+        }
+      } catch (err) {
+        adminLoginError.classList.remove('hidden');
+        adminLoginErrorText.textContent = 'Connection error: ' + err.message;
+      } finally {
+        btnAdminLoginSubmit.disabled = false;
+        btnAdminLoginSubmit.textContent = '🔓 Unlock Admin Dashboard';
+      }
+    });
+  }
+
+  if (btnAdminLogout) {
+    btnAdminLogout.addEventListener('click', () => {
+      if (confirm('Lock Admin Dashboard and log out?')) {
+        localStorage.removeItem(ADMIN_AUTH_KEY);
+        if (adminGateModal) adminGateModal.classList.remove('hidden');
+        showToast('Admin Dashboard locked.', 'info');
+      }
+    });
+  }
+}
 
 function setupEventListeners() {
   // Tabs
@@ -577,6 +663,8 @@ function mergeSingleUpdate() {
     }
   });
 
+  state.teamData = sortTeamDataByRoster(state.teamData);
+
   // Re-render UI & Save Draft
   renderBuilder();
   generateFormattedOutput();
@@ -741,7 +829,7 @@ function parseRawTasks(text) {
     }
   }
 
-  return members;
+  return sortTeamDataByRoster(members);
 }
 
 function isLikelyMember(str) {
@@ -810,6 +898,7 @@ function parseTaskStatus(line) {
 }
 
 function generateFormattedOutput() {
+  state.teamData = sortTeamDataByRoster(state.teamData);
   let plainText = '';
   plainText += `RESPECTED SIR,\n`;
   plainText += `ALL PROJECT STATUS\n`;
@@ -824,6 +913,11 @@ function generateFormattedOutput() {
   let totalProjects = 0;
   let totalDone = 0;
   let totalWIP = 0;
+
+  if (state.teamData.length === 0) {
+    plainText += `(Waiting for team updates to be submitted...)\n`;
+    htmlPreview += `<div class="empty-preview-notice" style="padding: 24px 16px; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: 500; border: 1px dashed var(--border-color); border-radius: 8px; margin-top: 10px;">⏳ <em>No team updates submitted yet for today.<br>Members can submit at <strong>/submit</strong> or use the Single Drop tab above.</em></div>\n`;
+  }
 
   state.teamData.forEach((member, mIdx) => {
     let roleStr = member.role ? `(${member.role})` : '';
@@ -902,6 +996,7 @@ function generateFormattedOutput() {
 // -----------------------------------------------------------------------------
 function renderBuilder() {
   membersContainer.innerHTML = '';
+  state.teamData = sortTeamDataByRoster(state.teamData);
 
   if (state.teamData.length === 0) {
     membersContainer.innerHTML = '<div class="empty-state">No members loaded yet. Drop updates in "Quick 1-on-1 Chat Drop" or load template.</div>';
@@ -1302,7 +1397,7 @@ async function loadTodayDraft(isAutoPoll = false) {
         }
 
         lastDraftHash = currentHash;
-        state.teamData = data.draft.teamData;
+        state.teamData = sortTeamDataByRoster(data.draft.teamData);
         if (data.draft.date) {
           state.date = data.draft.date;
           if (reportDateInput) reportDateInput.value = state.date;
@@ -1321,7 +1416,7 @@ async function loadTodayDraft(isAutoPoll = false) {
     } else if (!isAutoPoll) {
       state.date = getFormattedToday();
       if (reportDateInput) reportDateInput.value = state.date;
-      state.teamData = parseRawTasks(SAMPLE_09_09_TEXT);
+      state.teamData = [];
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
@@ -1492,6 +1587,7 @@ function setupFilterEventListeners() {
           }
         });
 
+        state.teamData = sortTeamDataByRoster(state.teamData);
         renderBuilder();
         generateFormattedOutput();
         renderChecklistTracker();
@@ -1696,6 +1792,7 @@ function renderSubmissionCards(submissions) {
       } else {
         state.teamData.push(memberEntry);
       }
+      state.teamData = sortTeamDataByRoster(state.teamData);
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
@@ -1813,7 +1910,8 @@ function buildFormattedSummaryFromSubmissions(submissions) {
   }
 
   let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${dateTitle}\n\n`;
-  submissions.forEach(sub => {
+  const sortedSubs = sortTeamDataByRoster(submissions);
+  sortedSubs.forEach(sub => {
     output += buildSingleMemberText(sub) + '\n\n';
   });
   return output.trimEnd();

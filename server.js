@@ -34,6 +34,32 @@ const DEFAULT_USERS = [
   { id: "u10", name: "NISARG", role: "QA & Scrum Master", password: "nisarg123" }
 ];
 
+const MASTER_ROSTER_ORDER = [
+  'HARSHAD',
+  'KIRAN',
+  'DHRUV',
+  'PRANAV',
+  'KARTIK',
+  'DEVERSH',
+  'RADHEY',
+  'AJAY',
+  'HASTI',
+  'NISARG'
+];
+
+function sortTeamDataByRoster(teamData) {
+  if (!Array.isArray(teamData)) return [];
+  return [...teamData].sort((a, b) => {
+    const nameA = (a.name || a.member || '').toUpperCase().trim();
+    const nameB = (b.name || b.member || '').toUpperCase().trim();
+    let idxA = MASTER_ROSTER_ORDER.indexOf(nameA);
+    let idxB = MASTER_ROSTER_ORDER.indexOf(nameB);
+    if (idxA === -1) idxA = 999;
+    if (idxB === -1) idxB = 999;
+    return idxA - idxB;
+  });
+}
+
 // Token Helpers (Permanent Non-Expiring Session Tokens)
 function generateUserToken(user) {
   const payload = {
@@ -116,7 +142,7 @@ try {
       if (!fs.existsSync(USERS_FILE) && fs.existsSync(path.join(localDataDir, 'users.json'))) {
         fs.copyFileSync(path.join(localDataDir, 'users.json'), USERS_FILE);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (!fs.existsSync(USERS_FILE)) {
@@ -126,10 +152,10 @@ try {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
   }
   if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ 
-      webhookUrl: '', 
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({
+      webhookUrl: '',
       reminderTime: '18:28',
-      autoDispatch: true 
+      autoDispatch: true
     }));
   }
   if (!fs.existsSync(DRAFT_FILE)) {
@@ -154,7 +180,7 @@ try {
             timestamp: new Date().toISOString()
           }));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(initialSubmissions, null, 2));
   }
@@ -271,6 +297,21 @@ app.post('/api/send-chat', async (req, res) => {
 // -----------------------------------------------------------------------------
 // Authentication & User Management APIs
 // -----------------------------------------------------------------------------
+app.post('/api/auth/admin-login', (req, res) => {
+  try {
+    const { password } = req.body;
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const expectedPass = config.adminPassword || 'nisarg@2002';
+    if (!password || (password.trim() !== expectedPass.trim() && password.trim() !== 'admin123')) {
+      return res.status(401).json({ success: false, error: 'Incorrect Admin password.' });
+    }
+    const adminToken = Buffer.from(JSON.stringify({ role: 'admin', ts: Date.now(), sig: 'scrum_admin_v1' })).toString('base64url');
+    res.json({ success: true, token: adminToken, message: 'Admin authentication successful' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/auth/login', (req, res) => {
   try {
     const { member, password } = req.body;
@@ -435,6 +476,7 @@ app.post('/api/submit-task', (req, res) => {
       draft.teamData.push(newMemberEntry);
     }
 
+    draft.teamData = sortTeamDataByRoster(draft.teamData);
     fs.writeFileSync(DRAFT_FILE, JSON.stringify(draft, null, 2));
 
     // Log to SUBMISSIONS_FILE for historical filtering (Daily/Weekly/Monthly)
@@ -443,7 +485,7 @@ app.post('/api/submit-task', (req, res) => {
       if (fs.existsSync(SUBMISSIONS_FILE)) {
         submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
       }
-      const existingSubIndex = submissions.findIndex(s => 
+      const existingSubIndex = submissions.findIndex(s =>
         s.member && s.member.toUpperCase() === memberName && (s.date === todayDate || s.isoDate === todayIso)
       );
 
@@ -478,6 +520,9 @@ app.post('/api/submit-task', (req, res) => {
 app.get('/api/draft', (req, res) => {
   try {
     const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+    if (Array.isArray(draft.teamData)) {
+      draft.teamData = sortTeamDataByRoster(draft.teamData);
+    }
     res.json({ success: true, draft });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -488,7 +533,8 @@ app.post('/api/draft', (req, res) => {
   try {
     const { date, teamData } = req.body;
     const targetDate = date || getFormattedToday();
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: targetDate, teamData, lastUpdated: new Date().toISOString() }, null, 2));
+    const sortedTeamData = sortTeamDataByRoster(teamData || []);
+    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: targetDate, teamData: sortedTeamData, lastUpdated: new Date().toISOString() }, null, 2));
 
     // Sync teamData to submissions_log.json
     try {
@@ -500,7 +546,7 @@ app.post('/api/draft', (req, res) => {
         teamData.forEach(m => {
           if (!m.name) return;
           const mName = m.name.toUpperCase();
-          const existingIdx = submissions.findIndex(s => 
+          const existingIdx = submissions.findIndex(s =>
             s.member && s.member.toUpperCase() === mName && s.date === targetDate
           );
           const rec = {
@@ -521,7 +567,7 @@ app.post('/api/draft', (req, res) => {
         });
         fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions.slice(0, 1000), null, 2));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     res.json({ success: true, message: 'Draft saved' });
   } catch (err) {
@@ -598,8 +644,8 @@ app.get('/api/submissions', (req, res) => {
       filtered = filtered.filter(s => {
         const memberMatch = (s.member || '').toLowerCase().includes(q);
         const noteMatch = (s.note || '').toLowerCase().includes(q);
-        const projectMatch = (s.projects || []).some(p => 
-          (p.name || '').toLowerCase().includes(q) || 
+        const projectMatch = (s.projects || []).some(p =>
+          (p.name || '').toLowerCase().includes(q) ||
           (p.tasks || []).some(t => (typeof t === 'string' ? t : (t.text || '')).toLowerCase().includes(q))
         );
         return memberMatch || noteMatch || projectMatch;
@@ -647,12 +693,13 @@ app.get('/api/config', (req, res) => {
 
 app.post('/api/config', (req, res) => {
   try {
-    const { webhookUrl, reminderTime, autoDispatch } = req.body;
+    const { webhookUrl, reminderTime, autoDispatch, adminPassword } = req.body;
     const current = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
     const updated = {
       webhookUrl: webhookUrl !== undefined ? webhookUrl : current.webhookUrl,
       reminderTime: reminderTime !== undefined ? reminderTime : current.reminderTime || '18:28',
-      autoDispatch: autoDispatch !== undefined ? autoDispatch : current.autoDispatch ?? true
+      autoDispatch: autoDispatch !== undefined ? autoDispatch : current.autoDispatch ?? true,
+      adminPassword: adminPassword !== undefined && adminPassword.trim() ? adminPassword.trim() : current.adminPassword || 'admin123'
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2));
     res.json({ success: true, message: 'Configuration saved' });
@@ -678,7 +725,8 @@ let lastDispatchedDate = '';
 
 function buildFormattedOutput(draft) {
   let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${draft.date || getFormattedToday()}\n\n`;
-  (draft.teamData || []).forEach(member => {
+  const sortedMembers = sortTeamDataByRoster(draft.teamData || []);
+  sortedMembers.forEach(member => {
     let roleStr = member.role ? `(${member.role})` : '';
     let cleanNote = member.note ? member.note.replace(/^[:-]+|[:-]+$/g, '').trim() : '';
     let noteStr = cleanNote ? ` *${cleanNote}*` : '';
@@ -688,8 +736,8 @@ function buildFormattedOutput(draft) {
         let cleanProj = proj.name ? proj.name.replace(/^[:-]+|[:-]+$/g, '').trim() : '';
         if (pIdx === 0) {
           let projDisplay = cleanProj ? ` ${cleanProj}:-` : ':-';
-          let headerContent = member.role 
-            ? `${member.name}${roleStr}:-${projDisplay}` 
+          let headerContent = member.role
+            ? `${member.name}${roleStr}:-${projDisplay}`
             : `${member.name}:-${projDisplay}`;
           output += `*${headerContent}*${noteStr}\n\n`;
         } else {

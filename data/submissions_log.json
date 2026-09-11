@@ -1,19 +1,23 @@
 [
   {
-    "id": "sub-1789117966585-ya1ct",
+    "id": "sub-1789119292497-xen0t",
     "member": "HARSHAD",
     "role": "",
     "note": "",
     "projects": [
       {
-        "name": "RankMyTrip",
+        "name": "rankmytrip",
         "tasks": [
           {
-            "text": "Tabbar UI",
+            "text": "create a home page UI",
             "status": "Done"
           },
           {
-            "text": "Add Vehicle Screen UI",
+            "text": "onboarding page1",
+            "status": "Done"
+          },
+          {
+            "text": "onboarding 2",
             "status": "Done"
           }
         ]
@@ -21,7 +25,7 @@
     ],
     "date": "11/09/2026",
     "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T09:12:46.585Z"
+    "timestamp": "2026-09-11T09:34:52.498Z"
   },
   {
     "id": "sub-1726055400001-kiran",
@@ -89,25 +93,45 @@
     "timestamp": "2026-09-11T11:45:00.000Z"
   },
   {
-    "id": "sub-1726055400003-pranav",
+    "id": "sub-1789119166397-gtlp4",
     "member": "PRANAV",
     "role": "",
     "note": "",
     "projects": [
       {
-        "name": "Happy Reward's Dashboard Application",
+        "name": "General Tasks",
         "tasks": [
           {
-            "text": "Enhanced and optimized the overall Dashboard UI/UX, improving usability, consistency, intuitive navigation, and overall user experience. Completed and successfully deployed the updated dashboard at https://happy-rewards-frontend.vercel.app .",
+            "text": "Dashboard UI enhancements",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "date": "11/09/2026",
+    "isoDate": "2026-09-11",
+    "timestamp": "2026-09-11T09:32:46.397Z"
+  },
+  {
+    "id": "sub-1789119242314-i7m51",
+    "member": "KARTIK",
+    "role": "",
+    "note": "",
+    "projects": [
+      {
+        "name": "hamilton dabbawala",
+        "tasks": [
+          {
+            "text": "create an api for home page",
             "status": "Done"
           }
         ]
       },
       {
-        "name": "Happy Reward's INGENICO Application",
+        "name": "shopify app",
         "tasks": [
           {
-            "text": "Actively developing the Happy Rewards application for Ingenico AXIUM payment terminals, implementing SDK integrations, payment workflows, device capabilities, and security architecture !",
+            "text": "edit the product caatalog page",
             "status": "Done"
           }
         ]
@@ -115,31 +139,7 @@
     ],
     "date": "11/09/2026",
     "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T14:15:00.000Z"
-  },
-  {
-    "id": "sub-1726055400004-kartik",
-    "member": "KARTIK",
-    "role": "",
-    "note": "ON HALF DAY",
-    "projects": [
-      {
-        "name": "Happy Reward Shopify",
-        "tasks": [
-          {
-            "text": "Disabled the automated review message, added SMS credentials for Boss Vape, and created a video demonstrating how to update the Checkout Extension",
-            "status": "Done"
-          },
-          {
-            "text": "Implemented a promotional message for carts above $50 to encourage customers to spend $100 or more to earn additional points, and created a video demonstrating the functionality",
-            "status": "Done"
-          }
-        ]
-      }
-    ],
-    "date": "11/09/2026",
-    "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T13:40:00.000Z"
+    "timestamp": "2026-09-11T09:34:02.314Z"
   },
   {
     "id": "sub-1726055400005-deversh",
@@ -202,28 +202,24 @@
     "timestamp": "2026-09-11T15:30:00.000Z"
   },
   {
-    "id": "sub-1789115938175-ni743",
+    "id": "sub-1789119166430-snzn2",
     "member": "AJAY",
     "role": "Designer",
-    "note": "ON HALF DAY",
+    "note": "",
     "projects": [
       {
-        "name": "Alarm App",
+        "name": "General Tasks",
         "tasks": [
           {
-            "text": "New sound effects",
+            "text": "Alarm App UI",
             "status": "Done"
-          },
-          {
-            "text": "Snooze setting",
-            "status": "WIP"
           }
         ]
       }
     ],
     "date": "11/09/2026",
     "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T08:38:58.175Z"
+    "timestamp": "2026-09-11T09:32:46.430Z"
   },
   {
     "id": "sub-1726055400008-hasti",
@@ -259,16 +255,16 @@
     "timestamp": "2026-09-11T16:20:00.000Z"
   },
   {
-    "id": "sub-1789118071063-bmv34",
+    "id": "sub-1789119166383-htomk",
     "member": "NISARG",
     "role": "QA & Scrum Master",
     "note": "",
     "projects": [
       {
-        "name": "second number app",
+        "name": "General Tasks",
         "tasks": [
           {
-            "text": "retest the all bugs",
+            "text": "Retest all bugs",
             "status": "Done"
           }
         ]
@@ -276,7 +272,7 @@
     ],
     "date": "11/09/2026",
     "isoDate": "2026-09-11",
-    "timestamp": "2026-09-11T09:14:31.063Z"
+    "timestamp": "2026-09-11T09:32:46.383Z"
   },
   {
     "id": "sub-1725969000000-harshad-10",
