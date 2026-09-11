@@ -299,6 +299,8 @@ function setupAdminAuthListeners() {
           adminGateModal.classList.add('hidden');
           adminAuthPassword.value = '';
           showToast('👑 Welcome back, Nisarg! Admin unlocked.', 'success');
+          await loadTodayDraft(false, true);
+          await fetchAndRenderSubmissions();
         } else {
           adminLoginError.classList.remove('hidden');
           adminLoginErrorText.textContent = data.error || 'Incorrect Admin password.';
@@ -348,6 +350,20 @@ function setupEventListeners() {
     generateFormattedOutput();
     saveTodayDraft();
   });
+
+  // Manual Live Sync Button
+  const btnRefreshLiveDraft = document.getElementById('btnRefreshLiveDraft');
+  if (btnRefreshLiveDraft) {
+    btnRefreshLiveDraft.addEventListener('click', async () => {
+      btnRefreshLiveDraft.disabled = true;
+      btnRefreshLiveDraft.textContent = '🔄 Syncing...';
+      await loadTodayDraft(false, true);
+      await fetchAndRenderSubmissions();
+      showToast('⚡ Live submissions synced!', 'success');
+      btnRefreshLiveDraft.disabled = false;
+      btnRefreshLiveDraft.textContent = '🔄 Sync Now';
+    });
+  }
 
   // Merge Single 1-on-1 Chat Update
   btnMergeSingle.addEventListener('click', mergeSingleUpdate);
@@ -981,6 +997,10 @@ function generateFormattedOutput() {
   formattedOutputText.innerHTML = htmlPreview.trimEnd();
   formattedOutputText.setAttribute('data-plain-text', plainText.trimEnd());
 
+  if (rawTextInput && !isUserTyping) {
+    rawTextInput.value = plainText.trimEnd();
+  }
+
   // Update Stats
   statMembers.textContent = totalMembers;
   statProjects.textContent = totalProjects;
@@ -1376,28 +1396,32 @@ document.addEventListener('input', (e) => {
   }
 });
 
-async function loadTodayDraft(isAutoPoll = false) {
+async function loadTodayDraft(isAutoPoll = false, forceRefresh = false) {
   try {
-    const res = await fetch('/api/draft');
+    const res = await fetch(`/api/draft?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+    });
     const data = await res.json();
-    if (data.draft && data.draft.teamData) {
-      const currentHash = JSON.stringify(data.draft.teamData);
+    if (data.draft && Array.isArray(data.draft.teamData)) {
+      const sortedIncoming = sortTeamDataByRoster(data.draft.teamData);
+      const currentHash = JSON.stringify(sortedIncoming);
 
-      if (currentHash !== lastDraftHash) {
+      if (currentHash !== lastDraftHash || forceRefresh) {
         // Detect newly submitted members for notification
         if (isAutoPoll && state.teamData && state.teamData.length > 0) {
           const oldNames = state.teamData.map(m => m.name);
-          const newNames = data.draft.teamData.map(m => m.name);
+          const newNames = sortedIncoming.map(m => m.name);
           const added = newNames.filter(n => !oldNames.includes(n));
           if (added.length > 0) {
-            showToast(`🔔 Live Update: ${added.join(', ')} just submitted their daily status!`, 'success');
+            showToast(`🔔 Live Update: ${added.join(', ')} submitted their daily status!`, 'success');
           } else {
             showToast(`🔔 Live Update: Daily tasks updated!`, 'info');
           }
         }
 
         lastDraftHash = currentHash;
-        state.teamData = sortTeamDataByRoster(data.draft.teamData);
+        state.teamData = sortedIncoming;
         if (data.draft.date) {
           state.date = data.draft.date;
           if (reportDateInput) reportDateInput.value = state.date;
@@ -1406,12 +1430,14 @@ async function loadTodayDraft(isAutoPoll = false) {
           if (reportDateInput) reportDateInput.value = state.date;
         }
 
-        // If user isn't actively typing in builder, re-render builder
-        if (!isUserTyping) {
-          renderBuilder();
-        }
+        renderBuilder();
         generateFormattedOutput();
         renderChecklistTracker();
+
+        // Also update Calendar & Member Filter if active/loaded
+        if (typeof fetchAndRenderSubmissions === 'function') {
+          fetchAndRenderSubmissions();
+        }
       }
     } else if (!isAutoPoll) {
       state.date = getFormattedToday();
@@ -1420,16 +1446,35 @@ async function loadTodayDraft(isAutoPoll = false) {
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
+      if (typeof fetchAndRenderSubmissions === 'function') {
+        fetchAndRenderSubmissions();
+      }
     }
   } catch (err) {
     if (!isAutoPoll) console.error('Failed to load draft:', err);
   }
 }
 
-// Poll server every 2.5 seconds for instant live updates from /submit
+// Poll server every 1.5 seconds for instant live updates from /submit
 setInterval(() => {
   loadTodayDraft(true);
-}, 2500);
+}, 1500);
+
+// Sync instantly when user switches back to this browser tab
+window.addEventListener('focus', () => {
+  loadTodayDraft(false, true);
+  if (typeof fetchAndRenderSubmissions === 'function') {
+    fetchAndRenderSubmissions();
+  }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    loadTodayDraft(false, true);
+    if (typeof fetchAndRenderSubmissions === 'function') {
+      fetchAndRenderSubmissions();
+    }
+  }
+});
 
 async function saveTodayDraft() {
   try {

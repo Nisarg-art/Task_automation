@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.7">
 </head>
 <body class="dark-mode">
   <div class="app-container">
@@ -89,6 +89,9 @@
       <div class="tracker-header">
         <span class="tracker-title">Team Daily Updates Checklist:</span>
         <span class="tracker-count" id="trackerCount">0 / 10 Received</span>
+        <button type="button" id="btnRefreshLiveDraft" class="btn btn-xs btn-outline" style="margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; font-size: 0.75rem;" title="Instantly sync live submissions from team">
+          🔄 Sync Now
+        </button>
       </div>
       <div class="roster-pills" id="rosterPills">
         <!-- Member status pills render dynamically here -->
@@ -512,6 +515,6 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.7"></script>
 </body>
 </html>

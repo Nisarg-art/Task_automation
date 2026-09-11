@@ -7,62 +7,18 @@
       "note": "",
       "projects": [
         {
-          "name": "General Tasks",
+          "name": "RankMyTrip",
           "tasks": [
             {
-              "text": "Drive History Screen UI",
+              "text": "Tabbar UI",
+              "status": "Done"
+            },
+            {
+              "text": "Add Vehicle Screen UI",
               "status": "Done"
             },
             {
               "text": "Drive History G-Force Distribution Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Elevation Profile Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Drive Role Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Drive Vehicle Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Drive Vehicle Select Delete Combine Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Select vehicle Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Select Comnbine Confirmation Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Select Comnbine Success Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Delete Popup Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive History Start Manual Drive Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive Tracking Module Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive Tracking Speed Screen UI",
-              "status": "Done"
-            },
-            {
-              "text": "Drive Tracking Map Screen UI",
               "status": "WIP"
             }
           ]
@@ -74,15 +30,6 @@
       "role": "",
       "note": "",
       "projects": [
-        {
-          "name": "VIP Cannabis",
-          "tasks": [
-            {
-              "text": "Configured and integrated the new Twilio number",
-              "status": "Done"
-            }
-          ]
-        },
         {
           "name": "Universal Second Number",
           "tasks": [

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.7">
   <style>
     body {
       background: radial-gradient(circle at 50% 0%, #172540 0%, #080d1a 100%);
@@ -275,6 +275,30 @@
       color: #38bdf8;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
+    .edit-status-alert {
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: #93c5fd;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .lock-status-alert {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.82rem;
+      color: #fca5a5;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
     .hidden { display: none !important; }
   </style>
 </head>
@@ -348,8 +372,8 @@
         <p style="font-size: 0.85rem; color: #a7f3d0; max-width: 440px;" id="successSubDesc">
           Your updates have been compiled into today's master status report.
         </p>
-        <button id="btnSubmitAnotherTasks" class="btn btn-sm btn-outline" style="margin-top: 8px;">
-          Submit Another Project / Update
+        <button type="button" id="btnEditMyTasks" class="btn btn-sm btn-outline" style="margin-top: 8px;">
+          ✏️ Edit / Update Today's Tasks
         </button>
       </div>
 
@@ -364,8 +388,26 @@
           <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch User</button>
         </div>
 
+        <!-- 6:28 PM Cutoff Lock Banner -->
+        <div id="lockAlertBanner" class="lock-status-alert hidden">
+          <span style="font-size: 1.3rem;">🔒</span>
+          <div>
+            <strong style="color: #ef4444; display: block; font-size: 0.88rem;">Submissions Closed for Today (6:28 PM Passed)</strong>
+            <span>The master status report has been compiled and dispatched to Sir's group. Submissions and edits are locked. Contact Scrum Master Nisarg if emergency updates are needed.</span>
+          </div>
+        </div>
+
+        <!-- Edit Existing Update Banner -->
+        <div id="editAlertBanner" class="edit-status-alert hidden">
+          <span style="font-size: 1.2rem;">✏️</span>
+          <div>
+            <strong style="color: #60a5fa; display: block;">Editing Today's Update</strong>
+            <span>Your previously submitted tasks are loaded below. You can modify them and click <strong>Update Today's Tasks</strong> anytime before <strong>6:28 PM</strong>.</span>
+          </div>
+        </div>
+
         <!-- Input Mode Switcher -->
-        <div class="input-mode-switcher">
+        <div class="input-mode-switcher" id="modeSwitcherWrap">
           <button type="button" class="input-mode-btn active" id="btnModeBulk">
             ⚡ Quick Free-Form Paste (Easiest)
           </button>
@@ -475,7 +517,7 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     const successSection = document.getElementById('successSection');
     const successHeaderTitle = document.getElementById('successHeaderTitle');
     const successSubDesc = document.getElementById('successSubDesc');
-    const btnSubmitAnotherTasks = document.getElementById('btnSubmitAnotherTasks');
+    const btnEditMyTasks = document.getElementById('btnEditMyTasks');
 
     let projectIndexCount = 1;
     let currentUser = null;
@@ -532,6 +574,56 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
 
       displayHeaderName.textContent = user.name;
       lockedMemberDisplay.textContent = user.role ? `${user.name} (${user.role})` : user.name;
+
+      checkSubmissionStatus(user);
+    }
+
+    async function checkSubmissionStatus(user) {
+      const lockAlertBanner = document.getElementById('lockAlertBanner');
+      const editAlertBanner = document.getElementById('editAlertBanner');
+      const modeSwitcherWrap = document.getElementById('modeSwitcherWrap');
+
+      try {
+        const res = await fetch(`/api/submission-status?member=${encodeURIComponent(user.name)}`, {
+          headers: { 'Authorization': `Bearer ${user.token || ''}` }
+        });
+        const data = await res.json();
+        if (!data.success) return;
+
+        if (data.isLocked) {
+          lockAlertBanner.classList.remove('hidden');
+          editAlertBanner.classList.add('hidden');
+          bulkTasksInput.disabled = true;
+          attendanceSelect.disabled = true;
+          btnSubmitStatus.disabled = true;
+          btnSubmitStatus.style.opacity = '0.5';
+          btnSubmitStatus.style.cursor = 'not-allowed';
+          btnSubmitStatus.innerHTML = `🔒 Submissions Closed for Today (${data.cutoffTime || '6:28 PM'})`;
+        } else {
+          lockAlertBanner.classList.add('hidden');
+          bulkTasksInput.disabled = false;
+          attendanceSelect.disabled = false;
+          btnSubmitStatus.disabled = false;
+          btnSubmitStatus.style.opacity = '1';
+          btnSubmitStatus.style.cursor = 'pointer';
+
+          if (data.existingSubmission) {
+            editAlertBanner.classList.remove('hidden');
+            if (data.existingSubmission.rawText) {
+              bulkTasksInput.value = data.existingSubmission.rawText;
+            }
+            if (data.existingSubmission.note) {
+              attendanceSelect.value = data.existingSubmission.note;
+            }
+            btnSubmitStatus.innerHTML = `💾 Update Today's Tasks`;
+          } else {
+            editAlertBanner.classList.add('hidden');
+            btnSubmitStatus.innerHTML = `🚀 Submit Today's Tasks`;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking submission status:', err);
+      }
     }
 
     // Handle Login Submit
@@ -673,8 +765,8 @@ Upload new build => Done"></textarea>
         if (data.success) {
           submissionForm.classList.add('hidden');
           successSection.classList.remove('hidden');
-          successHeaderTitle.textContent = `✓ Thanks, ${currentUser.name}!`;
-          successSubDesc.textContent = `Your tasks have been successfully compiled into today's 6:28 PM report in standard format.`;
+          successHeaderTitle.textContent = `✓ Tasks Saved, ${currentUser.name}!`;
+          successSubDesc.textContent = `Your tasks have been compiled into today's 6:28 PM report in standard format. You can review or edit them anytime before 6:28 PM.`;
         } else {
           alert('Submission Error: ' + data.error);
         }
@@ -686,10 +778,13 @@ Upload new build => Done"></textarea>
       }
     });
 
-    btnSubmitAnotherTasks.addEventListener('click', () => {
+    btnEditMyTasks.addEventListener('click', async () => {
       successSection.classList.add('hidden');
       submissionForm.classList.remove('hidden');
-      bulkTasksInput.value = '';
+      if (currentUser) {
+        await checkSubmissionStatus(currentUser);
+      }
+      bulkTasksInput.focus();
     });
   </script>
 </body>

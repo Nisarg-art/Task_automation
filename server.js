@@ -8,7 +8,15 @@ const PORT = process.env.PORT || 3050;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 const os = require('os');
 
@@ -117,6 +125,33 @@ function getIsoDate(dateObj = new Date()) {
     return formatter.format(dateObj);
   } catch (e) {
     return dateObj.toISOString().split('T')[0];
+  }
+}
+
+// Helper: Check if current time in Asia/Kolkata is after cutoff time (6:28 PM)
+function isAfterCutoffTime() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const cutoff = config.reminderTime || '18:28';
+    const [cutoffH, cutoffM] = cutoff.split(':').map(Number);
+
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const curH = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const curM = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+    const currentTotalMin = curH * 60 + curM;
+    const cutoffTotalMin = cutoffH * 60 + cutoffM;
+
+    return currentTotalMin >= cutoffTotalMin;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -383,12 +418,67 @@ app.post('/api/users/update', (req, res) => {
   }
 });
 
-// Member Direct Submission API from /submit (Supports Single & Multi-Projects with Auth Lock)
+// Check submission status, user draft, and 6:28 PM lock state
+app.get('/api/submission-status', (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token;
+    const authUser = verifyUserToken(token);
+    const memberName = (req.query.member || (authUser ? authUser.name : '')).toUpperCase().trim();
+
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const cutoffTime = config.reminderTime || '18:28';
+    const locked = isAfterCutoffTime();
+
+    let existingSubmission = null;
+    if (memberName) {
+      const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+      const found = (draft.teamData || []).find(m => m.name.toUpperCase() === memberName);
+      if (found) {
+        let rawText = '';
+        (found.projects || []).forEach(p => {
+          rawText += `${p.name}\n`;
+          (p.tasks || []).forEach(t => {
+            rawText += `${t.text} => ${t.status || 'Done'}\n`;
+          });
+          rawText += '\n';
+        });
+        existingSubmission = {
+          member: found.name,
+          role: found.role || '',
+          note: found.note || '',
+          projects: found.projects || [],
+          rawText: rawText.trim()
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      isLocked: locked,
+      cutoffTime: cutoffTime,
+      existingSubmission: existingSubmission
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Member Direct Submission API from /submit (Supports Single & Multi-Projects with Auth Lock & 6:28 PM Cutoff)
 app.post('/api/submit-task', (req, res) => {
   try {
     const { member, project, tasks, projects, note, password, token } = req.body;
     if (!member) {
       return res.status(400).json({ success: false, error: 'Member name is required.' });
+    }
+
+    // Cutoff Enforcement: Submissions/Edits close at 6:28 PM
+    if (isAfterCutoffTime()) {
+      return res.status(403).json({
+        success: false,
+        isLocked: true,
+        error: 'Submissions closed for today at 6:28 PM (Daily status report is already compiled and dispatched). Please contact Scrum Master Nisarg if emergency edits are needed.'
+      });
     }
 
     // Auth Validation: Verify user token or password
@@ -547,6 +637,7 @@ app.post('/api/submit-task', (req, res) => {
 // Draft Management
 app.get('/api/draft', (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
     if (Array.isArray(draft.teamData)) {
       draft.teamData = sortTeamDataByRoster(draft.teamData);
