@@ -22,16 +22,16 @@ const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 const DEFAULT_USERS = [
-  { id: "u1", name: "HARSHAD", role: "", password: "harshad123" },
-  { id: "u2", name: "KIRAN", role: "", password: "kiran123" },
-  { id: "u3", name: "DHRUV", role: "", password: "dhruv123" },
-  { id: "u4", name: "PRANAV", role: "", password: "pranav123" },
-  { id: "u5", name: "KARTIK", role: "", password: "kartik123" },
-  { id: "u6", name: "DEVERSH", role: "Nodejs Developer", password: "deversh123" },
-  { id: "u7", name: "RADHEY", role: "Nodejs Developer", password: "radhey123" },
-  { id: "u8", name: "AJAY", role: "Designer", password: "ajay123" },
-  { id: "u9", name: "HASTI", role: "Designer", password: "hasti123" },
-  { id: "u10", name: "NISARG", role: "QA & Scrum Master", password: "nisarg123" }
+  { id: "u1", name: "HARSHAD", role: "", password: "Harsh#842" },
+  { id: "u2", name: "KIRAN", role: "", password: "Kiran#519" },
+  { id: "u3", name: "DHRUV", role: "", password: "Dhruv#638" },
+  { id: "u4", name: "PRANAV", role: "", password: "Pran#247" },
+  { id: "u5", name: "KARTIK", role: "", password: "Kart#816" },
+  { id: "u6", name: "DEVERSH", role: "Nodejs Developer", password: "Deve#379" },
+  { id: "u7", name: "RADHEY", role: "Nodejs Developer", password: "Radh#592" },
+  { id: "u8", name: "AJAY", role: "Designer", password: "Ajay#481" },
+  { id: "u9", name: "HASTI", role: "Designer", password: "Hast#726" },
+  { id: "u10", name: "NISARG", role: "QA & Scrum Master", password: "nisarg@2002" }
 ];
 
 const MASTER_ROSTER_ORDER = [
