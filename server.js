@@ -576,9 +576,28 @@ app.post('/api/send-chat', async (req, res) => {
 app.post('/api/auth/admin-login', (req, res) => {
   try {
     const { password } = req.body;
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
-    const expectedPass = config.adminPassword || 'nisarg@2002';
-    if (!password || (password.trim() !== expectedPass.trim() && password.trim() !== 'admin123')) {
+    if (!password) {
+      return res.status(401).json({ success: false, error: 'Password is required.' });
+    }
+    const inputPass = String(password).trim();
+    let config = {};
+    try {
+      config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    } catch { }
+    let users = [];
+    try {
+      users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+    } catch { }
+    const nisargUser = users.find(u => u.name && u.name.toUpperCase() === 'NISARG');
+    
+    const validPasswords = new Set([
+      'nisarg@2002',
+      'admin123',
+      (config.adminPassword || '').trim(),
+      (nisargUser && nisargUser.password ? nisargUser.password.trim() : '')
+    ].filter(Boolean));
+
+    if (!validPasswords.has(inputPass)) {
       return res.status(401).json({ success: false, error: 'Incorrect Admin password.' });
     }
     const adminToken = Buffer.from(JSON.stringify({ role: 'admin', ts: Date.now(), sig: 'scrum_admin_v1' })).toString('base64url');
