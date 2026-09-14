@@ -1045,9 +1045,10 @@ app.get('/api/draft', (req, res) => {
 
 app.post('/api/draft', (req, res) => {
   try {
-    const { date, teamData, baseVersion, clientTimestamp, forceOverwrite } = req.body;
+    const { date, teamData, baseVersion, clientTimestamp, forceOverwrite, deletedMemberNames } = req.body;
     const targetDate = date || getFormattedToday();
     const incomingTeamData = Array.isArray(teamData) ? teamData : [];
+    const deletedSet = new Set((Array.isArray(deletedMemberNames) ? deletedMemberNames : []).map(n => String(n).toUpperCase().trim()));
 
     let serverDraft = { date: targetDate, teamData: [], version: 0 };
     try {
@@ -1056,83 +1057,77 @@ app.post('/api/draft', (req, res) => {
       }
     } catch (e) { }
 
-    let finalTeamData = [];
+    // If date changed to a new day, reset server draft
+    if (serverDraft.date && serverDraft.date !== targetDate) {
+      serverDraft = { date: targetDate, teamData: [], version: 0 };
+    }
 
-    if (forceOverwrite || serverDraft.date !== targetDate || !Array.isArray(serverDraft.teamData) || serverDraft.teamData.length === 0) {
-      // Direct update when forcing or starting new date
-      finalTeamData = incomingTeamData.map(m => ({
-        ...m,
-        updatedAt: m.updatedAt || new Date().toISOString()
-      }));
-    } else {
-      // Smart member-level merge to prevent stale client overwriting recent user submissions
-      const serverMembersMap = new Map();
+    const serverMembersMap = new Map();
+    if (Array.isArray(serverDraft.teamData)) {
       serverDraft.teamData.forEach(m => {
-        if (m && m.name) serverMembersMap.set(m.name.toUpperCase(), m);
+        if (m && m.name) serverMembersMap.set(m.name.toUpperCase().trim(), m);
       });
+    }
 
-      const clientMembersMap = new Map();
-      incomingTeamData.forEach(m => {
-        if (m && m.name) clientMembersMap.set(m.name.toUpperCase(), m);
-      });
+    const incomingMembersMap = new Map();
+    incomingTeamData.forEach(m => {
+      if (m && m.name) incomingMembersMap.set(m.name.toUpperCase().trim(), m);
+    });
 
-      const clientTime = clientTimestamp ? new Date(clientTimestamp).getTime() : 0;
-      const mergedMembers = new Map();
+    const mergedMembers = new Map();
 
-      // Check all server members
-      for (const [name, sMember] of serverMembersMap.entries()) {
-        const cMember = clientMembersMap.get(name);
-        const sUpdateTime = sMember.updatedAt ? new Date(sMember.updatedAt).getTime() : 0;
+    // 1. Preserve all existing server members unless explicitly deleted by Admin
+    for (const [name, sMember] of serverMembersMap.entries()) {
+      if (deletedSet.has(name)) {
+        continue; // Explicitly deleted by Admin
+      }
 
-        if (!cMember) {
-          // Member missing in client payload:
-          // If server was updated recently (after client snapshot/base version), preserve server member!
-          if (sUpdateTime > clientTime || (serverDraft.version && baseVersion && serverDraft.version > baseVersion)) {
-            mergedMembers.set(name, sMember);
-          }
-          // Otherwise, admin intentionally removed the member
+      const cMember = incomingMembersMap.get(name);
+      if (!cMember) {
+        // Missing in incoming client snapshot: PRESERVE server member submission!
+        mergedMembers.set(name, sMember);
+      } else {
+        // In both: check content
+        const sContent = JSON.stringify({ role: sMember.role || '', note: sMember.note || '', projects: sMember.projects || [], attachments: sMember.attachments || [] });
+        const cContent = JSON.stringify({ role: cMember.role || '', note: cMember.note || '', projects: cMember.projects || [], attachments: cMember.attachments || [] });
+
+        if (sContent === cContent) {
+          mergedMembers.set(name, sMember);
         } else {
-          // Member present in both:
-          // Compare member content
-          const sContent = JSON.stringify({ role: sMember.role || '', note: sMember.note || '', projects: sMember.projects || [] });
-          const cContent = JSON.stringify({ role: cMember.role || '', note: cMember.note || '', projects: cMember.projects || [] });
+          // Client has edits for this member
+          const sUpdateTime = sMember.updatedAt ? new Date(sMember.updatedAt).getTime() : 0;
+          const cUpdateTime = cMember.updatedAt ? new Date(cMember.updatedAt).getTime() : 0;
 
-          if (sContent === cContent) {
-            // No changes
-            mergedMembers.set(name, sMember);
-          } else if (sUpdateTime > clientTime && clientTime > 0) {
-            // Server member was updated AFTER client's edit/sync time (e.g. member submitted new task via /submit)
-            // Preserve the server's newer submission!
+          if (sUpdateTime > cUpdateTime && cUpdateTime > 0) {
             mergedMembers.set(name, sMember);
           } else {
-            // Client edited this member: apply client changes with new updatedAt
             mergedMembers.set(name, {
               ...cMember,
+              attachments: (cMember.attachments && cMember.attachments.length > 0) ? cMember.attachments : (sMember.attachments || []),
               updatedAt: new Date().toISOString()
             });
           }
         }
       }
-
-      // Check for newly added members by client
-      for (const [name, cMember] of clientMembersMap.entries()) {
-        if (!mergedMembers.has(name)) {
-          mergedMembers.set(name, {
-            ...cMember,
-            updatedAt: new Date().toISOString()
-          });
-        }
-      }
-
-      finalTeamData = Array.from(mergedMembers.values());
     }
 
-    const sortedTeamData = sortTeamDataByRoster(finalTeamData);
+    // 2. Add any newly added members from client payload
+    for (const [name, cMember] of incomingMembersMap.entries()) {
+      if (deletedSet.has(name)) continue;
+      if (!mergedMembers.has(name)) {
+        mergedMembers.set(name, {
+          ...cMember,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    const finalTeamData = sortTeamDataByRoster(Array.from(mergedMembers.values()));
     const newVersion = (serverDraft.version || 0) + 1;
 
     const updatedDraft = {
       date: targetDate,
-      teamData: sortedTeamData,
+      teamData: finalTeamData,
       version: newVersion,
       lastUpdated: new Date().toISOString()
     };

@@ -1109,7 +1109,10 @@ function renderBuilder() {
     btnDeleteMember.innerHTML = '&times; Remove';
     btnDeleteMember.addEventListener('click', () => {
       hasUnsavedChanges = true;
-      if (member.name) editedMemberNames.add(member.name.toUpperCase());
+      if (member.name) {
+        editedMemberNames.add(member.name.toUpperCase());
+        explicitlyDeletedMembers.add(member.name.toUpperCase());
+      }
       state.teamData.splice(mIdx, 1);
       renderBuilder();
       generateFormattedOutput();
@@ -1473,6 +1476,7 @@ let saveDebounceTimer = null;
 let pendingSave = false;
 let hasUnsavedChanges = false;
 let editedMemberNames = new Set();
+let explicitlyDeletedMembers = new Set();
 
 // Track when user is typing or interacting with inputs to avoid interrupting their work
 document.addEventListener('input', (e) => {
@@ -1541,9 +1545,10 @@ async function executeSaveTodayDraft(forceOverwrite = false) {
   const snapshotDate = state.date;
   const snapshotData = JSON.parse(JSON.stringify(state.teamData));
   const snapshotHash = JSON.stringify({ date: snapshotDate || '', teamData: sortTeamDataByRoster(snapshotData) });
+  const deletedSnapshot = Array.from(explicitlyDeletedMembers);
 
-  // If there are no unsaved changes and hash matches, don't perform redundant network writes
-  if (!hasUnsavedChanges && !forceOverwrite && snapshotHash === lastDraftHash) {
+  // If there are no unsaved changes and hash matches and no deleted members, don't perform redundant network writes
+  if (!hasUnsavedChanges && !forceOverwrite && snapshotHash === lastDraftHash && deletedSnapshot.length === 0) {
     return;
   }
 
@@ -1563,13 +1568,15 @@ async function executeSaveTodayDraft(forceOverwrite = false) {
         teamData: snapshotData,
         baseVersion: lastSyncedVersion,
         clientTimestamp: new Date(lastLocalEditTime || Date.now()).toISOString(),
-        forceOverwrite: forceOverwrite
+        forceOverwrite: forceOverwrite,
+        deletedMemberNames: deletedSnapshot
       })
     });
     const data = await res.json();
     if (data.success) {
       hasUnsavedChanges = false;
       editedMemberNames.clear();
+      explicitlyDeletedMembers.clear();
       if (data.version) lastSyncedVersion = data.version;
       if (data.draft && Array.isArray(data.draft.teamData)) {
         state.teamData = sortTeamDataByRoster(data.draft.teamData);
