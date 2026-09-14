@@ -21,8 +21,8 @@ messaging.onBackgroundMessage((payload) => {
 
   const options = {
     body: body,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
     data: { url: url },
     tag: tag,
     renotify: true,

@@ -1,7 +1,7 @@
 {
   "webhookUrl": "https://chat.googleapis.com/v1/spaces/TEST/messages",
-  "employeeReminderTime": "16:05",
-  "reminderTime": "18:28",
+  "employeeReminderTime": "18:00",
+  "reminderTime": "18:15",
   "autoDispatch": true,
   "adminPassword": "nisarg@2002"
 }

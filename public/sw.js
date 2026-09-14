@@ -11,9 +11,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('push', (event) => {
   let data = {
     title: '⏰ Daily Status Task Reminder',
-    body: 'Please submit or update your daily status report before the 6:28 PM cutoff.',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    body: 'Please submit or update your daily status report before the 6:15 PM cutoff.',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
     url: '/submit',
     tag: 'daily-scrum-reminder'
   };

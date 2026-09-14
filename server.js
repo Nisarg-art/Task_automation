@@ -127,16 +127,78 @@ function savePushSubscriptions(subs) {
   }
 }
 
-async function sendPushToEmployees(payload) {
+// Helper: Format 24h time string (e.g. "18:15") to 12h display string (e.g. "6:15 PM")
+function formatTimeDisplay(timeStr) {
+  if (!timeStr) return '6:15 PM';
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+// Helper: Get set of member names who have already submitted their status update today
+function getTodaySubmittedMembersSet() {
+  const submitted = new Set();
+  const today = getFormattedToday();
+
+  try {
+    if (fs.existsSync(DRAFT_FILE)) {
+      const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{}');
+      if (draft.date === today && Array.isArray(draft.teamData)) {
+        draft.teamData.forEach(m => {
+          if (m && m.name) {
+            const hasTasks = Array.isArray(m.projects) && m.projects.some(p => Array.isArray(p.tasks) && p.tasks.length > 0);
+            const hasNote = Boolean(m.note && m.note.trim());
+            if (hasTasks || hasNote) {
+              submitted.add(m.name.trim().toUpperCase());
+            }
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Error reading draft for submitted members:', e.message);
+  }
+
+  try {
+    if (fs.existsSync(SUBMISSIONS_FILE)) {
+      const logs = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
+      logs.forEach(log => {
+        if (log.date === today && log.member) {
+          submitted.add(log.member.trim().toUpperCase());
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Error reading submissions log:', e.message);
+  }
+
+  return submitted;
+}
+
+async function sendPushToEmployees(payload, options = {}) {
   const subs = getPushSubscriptions();
   const validSubs = [];
   const fcmTokens = [];
   let sentCount = 0;
 
+  const onlyPending = options.onlyPendingToday !== false;
+  const submittedSet = onlyPending ? getTodaySubmittedMembersSet() : new Set();
+
   for (const sub of subs) {
     if (sub.role === 'admin') {
       validSubs.push(sub);
       continue;
+    }
+
+    // If only pending members should receive reminders, skip users who already submitted today
+    if (onlyPending && sub.member) {
+      const normMember = sub.member.trim().toUpperCase();
+      if (submittedSet.has(normMember)) {
+        // User has already given their update today! Keep subscription valid, but skip reminder.
+        validSubs.push(sub);
+        continue;
+      }
     }
 
     // Firebase Cloud Messaging Token
@@ -733,12 +795,14 @@ app.post('/api/submit-task', (req, res) => {
       return res.status(400).json({ success: false, error: 'Member name is required.' });
     }
 
-    // Cutoff Enforcement: Submissions/Edits close at 6:28 PM
+    // Cutoff Enforcement: Submissions/Edits close at cutoff time
     if (isAfterCutoffTime()) {
+      const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+      const cutoffStr = formatTimeDisplay(config.reminderTime || '18:15');
       return res.status(403).json({
         success: false,
         isLocked: true,
-        error: 'Submissions closed for today at 6:28 PM (Daily status report is already compiled and dispatched). Please contact Scrum Master Nisarg if emergency edits are needed.'
+        error: `Submissions closed for today at ${cutoffStr} (Daily status report is already compiled and dispatched). Please contact Scrum Master Nisarg if emergency edits are needed.`
       });
     }
 
@@ -1441,6 +1505,8 @@ function check6pmEmployeeReminder() {
   try {
     const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
     const targetReminderTime = config.employeeReminderTime || '18:00';
+    const cutoffTime = config.reminderTime || '18:15';
+    const cutoffStr = formatTimeDisplay(cutoffTime);
 
     const now = new Date();
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -1462,14 +1528,14 @@ function check6pmEmployeeReminder() {
 
     if (isWorkingDay && timeStr === targetReminderTime && last6pmReminderDate !== todayDate) {
       last6pmReminderDate = todayDate;
-      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Working Day Push Reminder to Employees...`);
+      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Push Reminder to pending Employees...`);
       sendPushToEmployees({
-        title: `⏰ Daily Task Reminder (${targetReminderTime})`,
-        body: 'Reminder: Please submit or update your daily task status report before the 6:28 PM cutoff!',
+        title: `⏰ Daily Task Reminder (${formatTimeDisplay(targetReminderTime)})`,
+        body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
         url: '/submit',
         tag: 'employee-task-reminder'
-      }).then(count => {
-        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} employee device(s).`);
+      }, { onlyPendingToday: true }).then(count => {
+        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} pending employee device(s).`);
       }).catch(err => {
         console.error('Error dispatching push reminder:', err.message);
       });
@@ -1527,10 +1593,10 @@ async function checkAndAutoDispatch() {
     const currentTime = `${currentHours}:${currentMinutes}`;
     const todayStr = getFormattedToday();
 
-    const targetTime = config.reminderTime || '18:28';
+    const targetTime = config.reminderTime || '18:15';
 
     if (currentTime === targetTime && lastDispatchedDate !== todayStr) {
-      console.log(`⏰ [Auto-Cron] Triggering 6:28 PM Daily Status Auto-Dispatch...`);
+      console.log(`⏰ [Auto-Cron] Triggering ${formatTimeDisplay(targetTime)} Daily Status Auto-Dispatch...`);
       const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
 
       if (draft.teamData && draft.teamData.length > 0) {
@@ -1550,7 +1616,7 @@ async function checkAndAutoDispatch() {
             id: Date.now().toString(),
             timestamp: new Date().toISOString(),
             formattedText: text,
-            status: 'Auto-Dispatched by Bot (6:28 PM)'
+            status: `Auto-Dispatched by Bot (${formatTimeDisplay(targetTime)})`
           });
           fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2));
         } else {
@@ -1572,13 +1638,17 @@ setInterval(() => {
 // Vercel Cron Endpoint for 6:00 PM Mon-Fri employee push reminder
 app.get('/api/cron-reminder', async (req, res) => {
   try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const cutoffStr = formatTimeDisplay(config.reminderTime || '18:15');
+    const reminderStr = formatTimeDisplay(config.employeeReminderTime || '18:00');
+
     const count = await sendPushToEmployees({
-      title: '⏰ Daily Task Reminder (6:00 PM)',
-      body: 'Reminder: Please submit or update your daily task status report before the 6:28 PM cutoff!',
+      title: `⏰ Daily Task Reminder (${reminderStr})`,
+      body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
       url: '/submit',
       tag: 'employee-task-reminder'
-    });
-    return res.json({ success: true, message: `6:00 PM employee push reminder dispatched to ${count} device(s)!` });
+    }, { onlyPendingToday: true });
+    return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} pending device(s)!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
