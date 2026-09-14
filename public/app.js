@@ -2272,7 +2272,7 @@ function showToast(message, type = 'success') {
 }
 
 // -----------------------------------------------------------------------------
-// Admin Web Push Notifications (Live Employee Update Alerts & 6 PM Reminders)
+// Admin Push Notifications (Firebase Cloud Messaging + Web Push)
 // -----------------------------------------------------------------------------
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -2287,6 +2287,9 @@ function urlBase64ToUint8Array(base64String) {
 
 let adminSwRegistration = null;
 let isAdminPushSubscribed = false;
+let adminFcmToken = null;
+let adminFirebaseConfig = null;
+let adminFcmMessaging = null;
 
 async function initAdminPushServiceWorker() {
   const btnAdminPushToggle = document.getElementById('btnAdminPushToggle');
@@ -2296,7 +2299,37 @@ async function initAdminPushServiceWorker() {
 
   if ('serviceWorker' in navigator && 'PushManager' in window) {
     try {
-      adminSwRegistration = await navigator.serviceWorker.register('/sw.js');
+      adminSwRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      
+      // Fetch Firebase config & initialize
+      try {
+        const fbRes = await fetch('/api/firebase-config');
+        const fbData = await fbRes.json();
+        if (fbData.success && fbData.config && typeof firebase !== 'undefined') {
+          adminFirebaseConfig = fbData.config;
+          if (!firebase.apps.length) {
+            firebase.initializeApp(adminFirebaseConfig);
+          }
+          adminFcmMessaging = firebase.messaging();
+          
+          // Foreground notification handling
+          adminFcmMessaging.onMessage((payload) => {
+            const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '🔔 Scrum Admin Alert';
+            const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || 'New task submission received.';
+            showToast(`🔔 ${title}: ${body}`, 'info');
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+              new Notification(title, {
+                body: body,
+                icon: '/favicon.ico',
+                tag: 'admin-submission-alert'
+              });
+            }
+          });
+        }
+      } catch (cfgErr) {
+        console.warn('Admin Firebase init notice:', cfgErr.message);
+      }
+
       await checkAdminPushSubscription();
     } catch (err) {
       console.error('Admin Service Worker registration failed:', err);
@@ -2324,7 +2357,8 @@ async function checkAdminPushSubscription() {
   if (!adminSwRegistration) return;
   try {
     const sub = await adminSwRegistration.pushManager.getSubscription();
-    isAdminPushSubscribed = !(sub === null);
+    const storedToken = localStorage.getItem('fcm_admin_token');
+    isAdminPushSubscribed = !(sub === null) || Boolean(storedToken);
     updateAdminPushUI();
   } catch (e) {
     console.error('Error checking admin push subscription:', e);
@@ -2384,6 +2418,15 @@ async function toggleAdminPushSubscription() {
         });
         await sub.unsubscribe();
       }
+      const storedToken = localStorage.getItem('fcm_admin_token');
+      if (storedToken) {
+        await fetch('/api/fcm/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: storedToken })
+        });
+        localStorage.removeItem('fcm_admin_token');
+      }
       isAdminPushSubscribed = false;
       showToast('Admin Push Alerts disabled on this device', 'info');
     } else {
@@ -2393,25 +2436,55 @@ async function toggleAdminPushSubscription() {
         return;
       }
 
-      const res = await fetch('/api/push/public-key');
-      const data = await res.json();
-      if (!data.success || !data.publicKey) throw new Error('Could not fetch public VAPID key');
+      // Try FCM Token registration
+      if (adminFcmMessaging && adminFirebaseConfig && adminFirebaseConfig.vapidKey) {
+        try {
+          const token = await adminFcmMessaging.getToken({
+            vapidKey: adminFirebaseConfig.vapidKey,
+            serviceWorkerRegistration: adminSwRegistration
+          });
+          if (token) {
+            adminFcmToken = token;
+            localStorage.setItem('fcm_admin_token', token);
+            await fetch('/api/fcm/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: token,
+                role: 'admin',
+                member: 'Nisarg (Admin)'
+              })
+            });
+          }
+        } catch (fcmErr) {
+          console.warn('Admin FCM Token error, fallback to WebPush:', fcmErr.message);
+        }
+      }
 
-      const appServerKey = urlBase64ToUint8Array(data.publicKey);
-      const subscription = await adminSwRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: appServerKey
-      });
+      // Dual / Fallback WebPush registration
+      try {
+        const res = await fetch('/api/push/public-key');
+        const data = await res.json();
+        if (data.success && data.publicKey) {
+          const appServerKey = urlBase64ToUint8Array(data.publicKey);
+          const subscription = await adminSwRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: appServerKey
+          });
 
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscription: subscription,
-          role: 'admin',
-          member: 'Nisarg (Admin)'
-        })
-      });
+          await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscription: subscription,
+              role: 'admin',
+              member: 'Nisarg (Admin)'
+            })
+          });
+        }
+      } catch (wpErr) {
+        console.warn('Admin WebPush subscribe error:', wpErr.message);
+      }
 
       isAdminPushSubscribed = true;
       showToast('🔔 Admin Push Alerts enabled! You will be notified whenever employees submit tasks.', 'success');

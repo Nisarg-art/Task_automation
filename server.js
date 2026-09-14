@@ -30,6 +30,8 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 const os = require('os');
 const webpush = require('web-push');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getMessaging } = require('firebase-admin/messaging');
 
 // On Vercel, the app root (/var/task) is read-only; use os.tmpdir() (/tmp)
 const isVercel = Boolean(process.env.VERCEL);
@@ -41,6 +43,46 @@ const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push_subscriptions.json');
 const VAPID_FILE = path.join(DATA_DIR, 'vapid_keys.json');
+const FIREBASE_CONFIG_FILE = path.join(DATA_DIR, 'firebase_config.json');
+const FIREBASE_SA_FILE = path.join(DATA_DIR, 'firebase_service_account.json');
+
+// Initialize Firebase Admin SDK
+let firebaseApp = null;
+let firebaseMessaging = null;
+
+try {
+  let saData = null;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      saData = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } catch {
+      saData = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8'));
+    }
+  } else {
+    const saCandidates = [
+      FIREBASE_SA_FILE,
+      path.join(__dirname, 'data', 'firebase_service_account.json')
+    ];
+    for (const p of saCandidates) {
+      if (fs.existsSync(p)) {
+        saData = JSON.parse(fs.readFileSync(p, 'utf8'));
+        break;
+      }
+    }
+  }
+
+  if (saData && saData.project_id) {
+    firebaseApp = initializeApp({
+      credential: cert(saData)
+    });
+    firebaseMessaging = getMessaging(firebaseApp);
+    console.log('✅ Firebase Admin SDK initialized for project:', saData.project_id);
+  } else {
+    console.log('ℹ️ Firebase service account not found; FCM admin not active.');
+  }
+} catch (fbErr) {
+  console.error('⚠️ Firebase Admin SDK initialization error:', fbErr.message);
+}
 
 // Initialize VAPID Keys for Web Push Notifications
 let vapidKeys = { publicKey: '', privateKey: '' };
@@ -88,6 +130,7 @@ function savePushSubscriptions(subs) {
 async function sendPushToEmployees(payload) {
   const subs = getPushSubscriptions();
   const validSubs = [];
+  const fcmTokens = [];
   let sentCount = 0;
 
   for (const sub of subs) {
@@ -95,17 +138,67 @@ async function sendPushToEmployees(payload) {
       validSubs.push(sub);
       continue;
     }
-    try {
-      await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
-      validSubs.push(sub);
-      sentCount++;
-    } catch (err) {
-      if (err.statusCode === 404 || err.statusCode === 410) {
-        console.log(`Cleaned up expired push subscription for ${sub.member || 'employee'}`);
-      } else {
-        console.error('Push error to employee:', err.message);
+
+    // Firebase Cloud Messaging Token
+    if (sub.fcmToken) {
+      fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
+      continue;
+    }
+
+    // WebPush Subscription
+    if (sub.subscription && sub.subscription.endpoint) {
+      try {
+        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
         validSubs.push(sub);
+        sentCount++;
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          console.log(`Cleaned up expired push subscription for ${sub.member || 'employee'}`);
+        } else {
+          console.error('Push error to employee:', err.message);
+          validSubs.push(sub);
+        }
       }
+    }
+  }
+
+  // Send to FCM devices
+  if (firebaseMessaging && fcmTokens.length > 0) {
+    const tokenStrings = fcmTokens.map(t => t.token);
+    try {
+      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
+        tokens: tokenStrings,
+        notification: {
+          title: payload.title || '⏰ Daily Status Task Reminder',
+          body: payload.body || 'Please submit your task report.'
+        },
+        data: {
+          url: payload.url || '/submit',
+          tag: payload.tag || 'employee-reminder'
+        },
+        webpush: {
+          fcmOptions: {
+            link: payload.url || '/submit'
+          }
+        }
+      });
+      sentCount += fcmResponse.successCount;
+      fcmResponse.responses.forEach((resp, idx) => {
+        if (resp.success) {
+          validSubs.push(fcmTokens[idx].subRecord);
+        } else {
+          const errCode = resp.error ? resp.error.code : '';
+          if (errCode === 'messaging/invalid-registration-token' ||
+              errCode === 'messaging/registration-token-not-registered') {
+            console.log(`Cleaned up invalid FCM token for ${fcmTokens[idx].subRecord.member || 'employee'}`);
+          } else {
+            validSubs.push(fcmTokens[idx].subRecord);
+          }
+        }
+      });
+    } catch (fcmErr) {
+      console.error('FCM Multicast error to employees:', fcmErr.message);
+      fcmTokens.forEach(t => validSubs.push(t.subRecord));
     }
   }
 
@@ -118,6 +211,7 @@ async function sendPushToEmployees(payload) {
 async function sendPushToAdmins(payload) {
   const subs = getPushSubscriptions();
   const validSubs = [];
+  const fcmTokens = [];
   let sentCount = 0;
 
   for (const sub of subs) {
@@ -125,17 +219,67 @@ async function sendPushToAdmins(payload) {
       validSubs.push(sub);
       continue;
     }
-    try {
-      await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
-      validSubs.push(sub);
-      sentCount++;
-    } catch (err) {
-      if (err.statusCode === 404 || err.statusCode === 410) {
-        console.log(`Cleaned up expired push subscription for admin`);
-      } else {
-        console.error('Push error to admin:', err.message);
+
+    // Firebase Cloud Messaging Token
+    if (sub.fcmToken) {
+      fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
+      continue;
+    }
+
+    // WebPush Subscription
+    if (sub.subscription && sub.subscription.endpoint) {
+      try {
+        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
         validSubs.push(sub);
+        sentCount++;
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          console.log(`Cleaned up expired push subscription for admin`);
+        } else {
+          console.error('Push error to admin:', err.message);
+          validSubs.push(sub);
+        }
       }
+    }
+  }
+
+  // Send to FCM Admin devices
+  if (firebaseMessaging && fcmTokens.length > 0) {
+    const tokenStrings = fcmTokens.map(t => t.token);
+    try {
+      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
+        tokens: tokenStrings,
+        notification: {
+          title: payload.title || '🔔 Scrum Admin Alert',
+          body: payload.body || 'New task submission received.'
+        },
+        data: {
+          url: payload.url || '/',
+          tag: payload.tag || 'admin-alert'
+        },
+        webpush: {
+          fcmOptions: {
+            link: payload.url || '/'
+          }
+        }
+      });
+      sentCount += fcmResponse.successCount;
+      fcmResponse.responses.forEach((resp, idx) => {
+        if (resp.success) {
+          validSubs.push(fcmTokens[idx].subRecord);
+        } else {
+          const errCode = resp.error ? resp.error.code : '';
+          if (errCode === 'messaging/invalid-registration-token' ||
+              errCode === 'messaging/registration-token-not-registered') {
+            console.log(`Cleaned up invalid FCM token for admin`);
+          } else {
+            validSubs.push(fcmTokens[idx].subRecord);
+          }
+        }
+      });
+    } catch (fcmErr) {
+      console.error('FCM Multicast error to admins:', fcmErr.message);
+      fcmTokens.forEach(t => validSubs.push(t.subRecord));
     }
   }
 
@@ -1088,6 +1232,38 @@ app.get('/api/history', (req, res) => {
   }
 });
 
+// Firebase Client Config API
+app.get('/api/firebase-config', (req, res) => {
+  try {
+    let cfg = null;
+    if (process.env.FIREBASE_CONFIG) {
+      try {
+        cfg = JSON.parse(process.env.FIREBASE_CONFIG);
+      } catch {
+        cfg = JSON.parse(Buffer.from(process.env.FIREBASE_CONFIG, 'base64').toString('utf8'));
+      }
+    } else {
+      const cfgCandidates = [
+        FIREBASE_CONFIG_FILE,
+        path.join(__dirname, 'data', 'firebase_config.json')
+      ];
+      for (const p of cfgCandidates) {
+        if (fs.existsSync(p)) {
+          cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+          break;
+        }
+      }
+    }
+    if (cfg) {
+      res.json({ success: true, config: cfg, enabled: true });
+    } else {
+      res.json({ success: false, enabled: false, message: 'Firebase config not found' });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Push Notification Endpoints
 app.get('/api/push/public-key', (req, res) => {
   try {
@@ -1097,16 +1273,82 @@ app.get('/api/push/public-key', (req, res) => {
   }
 });
 
+app.post('/api/fcm/subscribe', (req, res) => {
+  try {
+    const { token, fcmToken, role, member } = req.body;
+    const registrationToken = token || fcmToken;
+    if (!registrationToken) {
+      return res.status(400).json({ success: false, error: 'FCM Token is required.' });
+    }
+    const subs = getPushSubscriptions();
+    const existingIdx = subs.findIndex(s => s.fcmToken === registrationToken);
+    const subRecord = {
+      id: `fcm-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      type: 'fcm',
+      fcmToken: registrationToken,
+      role: role || 'employee',
+      member: member || '',
+      updatedAt: new Date().toISOString()
+    };
+    if (existingIdx >= 0) {
+      subs[existingIdx] = subRecord;
+    } else {
+      subs.push(subRecord);
+    }
+    savePushSubscriptions(subs);
+    res.json({ success: true, message: 'Firebase Cloud Messaging token registered!' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/fcm/unsubscribe', (req, res) => {
+  try {
+    const { token, fcmToken } = req.body;
+    const registrationToken = token || fcmToken;
+    if (!registrationToken) {
+      return res.status(400).json({ success: false, error: 'Token is required.' });
+    }
+    const subs = getPushSubscriptions();
+    const filtered = subs.filter(s => s.fcmToken !== registrationToken);
+    savePushSubscriptions(filtered);
+    res.json({ success: true, message: 'FCM token removed.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/push/subscribe', (req, res) => {
   try {
-    const { subscription, role, member } = req.body;
+    const { subscription, fcmToken, role, member } = req.body;
+    if (fcmToken) {
+      const subs = getPushSubscriptions();
+      const existingIdx = subs.findIndex(s => s.fcmToken === fcmToken);
+      const subRecord = {
+        id: `fcm-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        type: 'fcm',
+        fcmToken: fcmToken,
+        role: role || 'employee',
+        member: member || '',
+        updatedAt: new Date().toISOString()
+      };
+      if (existingIdx >= 0) {
+        subs[existingIdx] = subRecord;
+      } else {
+        subs.push(subRecord);
+      }
+      savePushSubscriptions(subs);
+      return res.json({ success: true, message: 'Firebase token subscription registered!' });
+    }
+
     if (!subscription || !subscription.endpoint) {
-      return res.status(400).json({ success: false, error: 'Subscription endpoint is required.' });
+      return res.status(400).json({ success: false, error: 'Subscription endpoint or fcmToken is required.' });
     }
     const subs = getPushSubscriptions();
     const existingIdx = subs.findIndex(s => s.subscription && s.subscription.endpoint === subscription.endpoint);
     const subRecord = {
       id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      type: 'webpush',
       subscription: subscription,
       role: role || 'employee',
       member: member || '',
@@ -1126,12 +1368,16 @@ app.post('/api/push/subscribe', (req, res) => {
 
 app.post('/api/push/unsubscribe', (req, res) => {
   try {
-    const { endpoint } = req.body;
-    if (!endpoint) {
-      return res.status(400).json({ success: false, error: 'Endpoint is required.' });
+    const { endpoint, fcmToken } = req.body;
+    if (!endpoint && !fcmToken) {
+      return res.status(400).json({ success: false, error: 'Endpoint or fcmToken is required.' });
     }
     const subs = getPushSubscriptions();
-    const filtered = subs.filter(s => s.subscription && s.subscription.endpoint !== endpoint);
+    const filtered = subs.filter(s => {
+      if (endpoint && s.subscription && s.subscription.endpoint === endpoint) return false;
+      if (fcmToken && s.fcmToken === fcmToken) return false;
+      return true;
+    });
     savePushSubscriptions(filtered);
     res.json({ success: true, message: 'Unsubscribed from push notifications.' });
   } catch (err) {

@@ -10,6 +10,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "firebase-admin": "^14.4.0",
     "web-push": "^3.6.7"
   }
 }

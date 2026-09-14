@@ -936,8 +936,13 @@ Upload new build => Done"></textarea>
       bulkTasksInput.focus();
     });
 
+  <!-- Firebase App & Messaging SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+
+  <script>
     // -------------------------------------------------------------------------
-    // 6:00 PM Web Push Notifications (Service Worker & VAPID Registration)
+    // 6:00 PM Push Notifications (Firebase Cloud Messaging + Service Worker)
     // -------------------------------------------------------------------------
     function urlBase64ToUint8Array(base64String) {
       const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -952,12 +957,44 @@ Upload new build => Done"></textarea>
 
     let swRegistration = null;
     let isPushSubscribed = false;
+    let currentFcmToken = null;
+    let firebaseConfig = null;
+    let fcmMessaging = null;
     const btnPushReminderToggle = document.getElementById('btnPushReminderToggle');
 
     async function initPushServiceWorker() {
       if ('serviceWorker' in navigator && 'PushManager' in window) {
         try {
-          swRegistration = await navigator.serviceWorker.register('/sw.js');
+          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          
+          // Fetch Firebase configuration
+          try {
+            const fbRes = await fetch('/api/firebase-config');
+            const fbData = await fbRes.json();
+            if (fbData.success && fbData.config && typeof firebase !== 'undefined') {
+              firebaseConfig = fbData.config;
+              if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+              }
+              fcmMessaging = firebase.messaging();
+              
+              // Handle foreground FCM messages
+              fcmMessaging.onMessage((payload) => {
+                const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '⏰ Daily Status Reminder';
+                const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || 'Please submit or update your task status.';
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                  new Notification(title, {
+                    body: body,
+                    icon: '/favicon.ico',
+                    tag: 'daily-task-reminder'
+                  });
+                }
+              });
+            }
+          } catch (cfgErr) {
+            console.warn('Firebase init notice:', cfgErr.message);
+          }
+
           await checkPushSubscription();
         } catch (error) {
           console.error('Service Worker registration error:', error);
@@ -971,7 +1008,8 @@ Upload new build => Done"></textarea>
       if (!swRegistration) return;
       try {
         const sub = await swRegistration.pushManager.getSubscription();
-        isPushSubscribed = !(sub === null);
+        const storedToken = localStorage.getItem('fcm_employee_token');
+        isPushSubscribed = !(sub === null) || Boolean(storedToken);
         updatePushUI();
       } catch (err) {
         console.error('Error checking push subscription:', err);
@@ -998,7 +1036,7 @@ Upload new build => Done"></textarea>
 
     async function togglePushSubscription() {
       if (!swRegistration) {
-        alert('Web Push is not supported in this browser.');
+        alert('Push notifications are not supported in this browser.');
         return;
       }
       btnPushReminderToggle.disabled = true;
@@ -1014,6 +1052,15 @@ Upload new build => Done"></textarea>
             });
             await sub.unsubscribe();
           }
+          const storedToken = localStorage.getItem('fcm_employee_token');
+          if (storedToken) {
+            await fetch('/api/fcm/unsubscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: storedToken })
+            });
+            localStorage.removeItem('fcm_employee_token');
+          }
           isPushSubscribed = false;
         } else {
           const permission = await Notification.requestPermission();
@@ -1023,25 +1070,57 @@ Upload new build => Done"></textarea>
             return;
           }
 
-          const res = await fetch('/api/push/public-key');
-          const data = await res.json();
-          if (!data.success || !data.publicKey) throw new Error('Could not fetch push public key');
+          const memberName = currentUser ? currentUser.name : (loginMemberSelect ? loginMemberSelect.value : '');
 
-          const applicationServerKey = urlBase64ToUint8Array(data.publicKey);
-          const subscription = await swRegistration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: applicationServerKey
-          });
+          // Try FCM Token Registration
+          if (fcmMessaging && firebaseConfig && firebaseConfig.vapidKey) {
+            try {
+              const token = await fcmMessaging.getToken({
+                vapidKey: firebaseConfig.vapidKey,
+                serviceWorkerRegistration: swRegistration
+              });
+              if (token) {
+                currentFcmToken = token;
+                localStorage.setItem('fcm_employee_token', token);
+                await fetch('/api/fcm/subscribe', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    token: token,
+                    role: 'employee',
+                    member: memberName
+                  })
+                });
+              }
+            } catch (fcmErr) {
+              console.warn('FCM Token error, falling back to WebPush:', fcmErr.message);
+            }
+          }
 
-          await fetch('/api/push/subscribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              subscription: subscription,
-              role: 'employee',
-              member: currentUser ? currentUser.name : (loginMemberSelect ? loginMemberSelect.value : '')
-            })
-          });
+          // Fallback / Dual WebPush subscription
+          try {
+            const res = await fetch('/api/push/public-key');
+            const data = await res.json();
+            if (data.success && data.publicKey) {
+              const applicationServerKey = urlBase64ToUint8Array(data.publicKey);
+              const subscription = await swRegistration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+              });
+
+              await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  subscription: subscription,
+                  role: 'employee',
+                  member: memberName
+                })
+              });
+            }
+          } catch (wpErr) {
+            console.warn('WebPush subscription error:', wpErr.message);
+          }
 
           isPushSubscribed = true;
         }
