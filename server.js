@@ -1226,13 +1226,14 @@ app.get('/api/config', (req, res) => {
 
 app.post('/api/config', (req, res) => {
   try {
-    const { webhookUrl, reminderTime, autoDispatch, adminPassword } = req.body;
+    const { webhookUrl, reminderTime, employeeReminderTime, autoDispatch, adminPassword } = req.body;
     const current = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
     const updated = {
       webhookUrl: webhookUrl !== undefined ? webhookUrl : current.webhookUrl,
       reminderTime: reminderTime !== undefined ? reminderTime : current.reminderTime || '18:28',
+      employeeReminderTime: employeeReminderTime !== undefined ? employeeReminderTime : current.employeeReminderTime || '16:05',
       autoDispatch: autoDispatch !== undefined ? autoDispatch : current.autoDispatch ?? true,
-      adminPassword: adminPassword !== undefined && adminPassword.trim() ? adminPassword.trim() : current.adminPassword || 'admin123'
+      adminPassword: adminPassword !== undefined && adminPassword.trim() ? adminPassword.trim() : current.adminPassword || 'nisarg@2002'
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2));
     res.json({ success: true, message: 'Configuration saved' });
