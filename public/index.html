@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=2.7">
+  <link rel="stylesheet" href="styles.css?v=2.8">
 </head>
 <body class="dark-mode">
   <div class="app-container">
@@ -42,6 +42,12 @@
         <button id="btnCopyTeamLink" class="btn btn-secondary" title="Copy shareable link for team members">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
           Share Submit Link
+        </button>
+
+        <!-- Admin Push Alerts Button -->
+        <button id="btnAdminPushToggle" class="btn btn-secondary" title="Enable instant push alerts on this device when employees submit tasks">
+          <span id="adminPushIcon">🔔</span>
+          <span id="adminPushText">Push Alerts</span>
         </button>
 
         <!-- Webhook Config Button -->
@@ -89,6 +95,10 @@
       <div class="tracker-header">
         <span class="tracker-title">Team Daily Updates Checklist:</span>
         <span class="tracker-count" id="trackerCount">0 / 10 Received</span>
+        <span id="liveSyncStatus" style="font-size: 0.72rem; color: #34d399; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);"></span>
+          Live Synced (1.5s)
+        </span>
         <button type="button" id="btnRefreshLiveDraft" class="btn btn-xs btn-outline" style="margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; font-size: 0.75rem;" title="Instantly sync live submissions from team">
           🔄 Sync Now
         </button>
@@ -420,6 +430,10 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
           Google Chat Webhook & Dispatch
         </button>
+        <button type="button" class="settings-tab-btn" data-target="settings-push-tab">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          🔔 Push Alerts & 6 PM Reminders
+        </button>
         <button type="button" class="settings-tab-btn" data-target="settings-passwords-tab">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
           🔐 Employee Passwords & Auth
@@ -456,7 +470,39 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           <div class="webhook-test-results hidden" id="webhookTestResult"></div>
         </div>
 
-        <!-- Sub-Tab 2: Employee Passwords & Access -->
+        <!-- Sub-Tab 2: Web Push & 6:00 PM Reminders -->
+        <div id="settings-push-tab" class="settings-tab-pane">
+          <div style="margin-bottom: 14px;">
+            <strong style="font-size: 0.95rem; color: #f8fafc;">⏰ 6:00 PM Employee Task Reminders (Mon–Fri)</strong>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">
+              Every working day (Monday to Friday at 6:00 PM IST), an automated Web Push reminder is sent directly to all employee phones and laptops to submit their tasks before the 6:28 PM cutoff.
+            </p>
+          </div>
+
+          <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div>
+                <strong style="font-size: 0.88rem; color: #38bdf8;">Admin Push Notification Alerts</strong>
+                <div style="font-size: 0.76rem; color: #cbd5e1; margin-top: 2px;">Receive an instant notification whenever an employee submits or updates a task.</div>
+              </div>
+              <button type="button" id="btnAdminSettingsPushToggle" class="btn btn-xs btn-outline">
+                <span id="adminSettingsPushText">Enable Push</span>
+              </button>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" id="btnTestAdminPush" class="btn btn-secondary btn-sm">
+              🧪 Test Admin Alert (This Device)
+            </button>
+            <button type="button" id="btnTestEmployeePush" class="btn btn-secondary btn-sm">
+              📢 Test 6:00 PM Employee Reminder
+            </button>
+          </div>
+          <div id="pushTestResult" class="webhook-test-results hidden" style="margin-top: 10px;"></div>
+        </div>
+
+        <!-- Sub-Tab 3: Employee Passwords & Access -->
         <div id="settings-passwords-tab" class="settings-tab-pane">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <div>
@@ -515,6 +561,6 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     </div>
   </div>
 
-  <script src="app.js?v=2.7"></script>
+  <script src="app.js?v=2.8"></script>
 </body>
 </html>

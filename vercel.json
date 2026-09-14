@@ -22,8 +22,12 @@
   ],
   "crons": [
     {
+      "path": "/api/cron-reminder",
+      "schedule": "30 12 * * 1-5"
+    },
+    {
       "path": "/api/cron-dispatch",
-      "schedule": "28 18 * * *"
+      "schedule": "58 12 * * *"
     }
   ]
 }

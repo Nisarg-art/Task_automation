@@ -8,6 +8,16 @@ const PORT = process.env.PORT || 3050;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Ensure all API responses disable caching completely so clients never get stale draft state
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
@@ -19,6 +29,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 const os = require('os');
+const webpush = require('web-push');
 
 // On Vercel, the app root (/var/task) is read-only; use os.tmpdir() (/tmp)
 const isVercel = Boolean(process.env.VERCEL);
@@ -28,6 +39,111 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DRAFT_FILE = path.join(DATA_DIR, 'today_draft.json');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push_subscriptions.json');
+const VAPID_FILE = path.join(DATA_DIR, 'vapid_keys.json');
+
+// Initialize VAPID Keys for Web Push Notifications
+let vapidKeys = { publicKey: '', privateKey: '' };
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (fs.existsSync(VAPID_FILE)) {
+    vapidKeys = JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8') || '{}');
+  }
+  if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+    vapidKeys = webpush.generateVAPIDKeys();
+    fs.writeFileSync(VAPID_FILE, JSON.stringify(vapidKeys, null, 2));
+  }
+  webpush.setVapidDetails(
+    'mailto:admin@taskautomation.local',
+    vapidKeys.publicKey,
+    vapidKeys.privateKey
+  );
+} catch (vapidErr) {
+  console.error('Error setting up VAPID keys:', vapidErr.message);
+}
+
+if (!fs.existsSync(PUSH_SUBS_FILE)) {
+  fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify([]));
+}
+
+function getPushSubscriptions() {
+  try {
+    if (fs.existsSync(PUSH_SUBS_FILE)) {
+      return JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf8') || '[]');
+    }
+  } catch (e) { }
+  return [];
+}
+
+function savePushSubscriptions(subs) {
+  try {
+    fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify(subs, null, 2));
+  } catch (e) {
+    console.error('Failed to save push subscriptions:', e.message);
+  }
+}
+
+async function sendPushToEmployees(payload) {
+  const subs = getPushSubscriptions();
+  const validSubs = [];
+  let sentCount = 0;
+
+  for (const sub of subs) {
+    if (sub.role === 'admin') {
+      validSubs.push(sub);
+      continue;
+    }
+    try {
+      await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
+      validSubs.push(sub);
+      sentCount++;
+    } catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        console.log(`Cleaned up expired push subscription for ${sub.member || 'employee'}`);
+      } else {
+        console.error('Push error to employee:', err.message);
+        validSubs.push(sub);
+      }
+    }
+  }
+
+  if (validSubs.length !== subs.length) {
+    savePushSubscriptions(validSubs);
+  }
+  return sentCount;
+}
+
+async function sendPushToAdmins(payload) {
+  const subs = getPushSubscriptions();
+  const validSubs = [];
+  let sentCount = 0;
+
+  for (const sub of subs) {
+    if (sub.role !== 'admin') {
+      validSubs.push(sub);
+      continue;
+    }
+    try {
+      await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
+      validSubs.push(sub);
+      sentCount++;
+    } catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        console.log(`Cleaned up expired push subscription for admin`);
+      } else {
+        console.error('Push error to admin:', err.message);
+        validSubs.push(sub);
+      }
+    }
+  }
+
+  if (validSubs.length !== subs.length) {
+    savePushSubscriptions(validSubs);
+  }
+  return sentCount;
+}
 
 const DEFAULT_USERS = [
   { id: "u1", name: "HARSHAD", role: "", password: "Harsh#842" },
@@ -249,25 +365,6 @@ app.get('/api/info', (req, res) => {
     adminUrl: `http://localhost:${PORT}`
   });
 });
-
-// Helper: Format Date DD/MM/YYYY in Asia/Kolkata / Local timezone
-function getFormattedToday() {
-  const now = new Date();
-  try {
-    const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-    return formatter.format(now);
-  } catch (e) {
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    return `${day}/${month}/${year}`;
-  }
-}
 
 // Send Message to Google Chat via Webhook
 app.post('/api/send-chat', async (req, res) => {
@@ -509,44 +606,95 @@ app.post('/api/submit-task', (req, res) => {
 
     function parseRawMemberInput(rawText, defaultProjectName = 'General Tasks') {
       if (!rawText || !rawText.trim()) return [];
-      const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+      const trimmed = rawText.trim();
+      const blocks = trimmed.split(/\n\s*\n+/);
       const projList = [];
-      let curProj = null;
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
-        const isBullet = /^[-•*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line);
-        const isExplicitHeader = /[:-]+$/.test(line) && !hasStatus;
-        const isProjectHeader = isExplicitHeader || (!hasStatus && !isBullet && line.length < 80);
+      if (blocks.length > 1) {
+        for (const block of blocks) {
+          const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+          if (lines.length === 0) continue;
 
-        if (isProjectHeader) {
-          let cleanProjName = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
-          curProj = {
-            name: cleanProjName || defaultProjectName,
-            tasks: []
-          };
-          projList.push(curProj);
-        } else {
-          if (!curProj) {
-            curProj = { name: defaultProjectName, tasks: [] };
+          let projName = defaultProjectName;
+          let taskLines = lines;
+
+          const firstLine = lines[0];
+          const isFirstLineBullet = /^[-•*]\s+/.test(firstLine) || /^\d+[\.\)]\s+/.test(firstLine);
+          const isFirstLineExplicitHeader = /[:-]+$/.test(firstLine);
+          const hasStatusInFirstLine = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(firstLine) || /\b(DONE|WIP)\b/i.test(firstLine);
+
+          if ((isFirstLineExplicitHeader || (!isFirstLineBullet && !hasStatusInFirstLine && firstLine.length < 80)) && lines.length > 1) {
+            projName = firstLine.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim() || defaultProjectName;
+            taskLines = lines.slice(1);
+          } else if (isFirstLineExplicitHeader && lines.length === 1) {
+            projName = firstLine.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim() || defaultProjectName;
+            taskLines = [];
+          }
+
+          const tasks = [];
+          for (const line of taskLines) {
+            let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
+            let status = 'Done';
+
+            if (/[-—–=>:]+\s*(wip|in\s*progress|working)/i.test(clean) || /\bWIP\b/i.test(clean)) {
+              status = 'WIP';
+              clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working)/i, '').replace(/\bWIP\b/i, '').trim();
+            } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
+              status = 'Done';
+              clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
+            }
+
+            clean = clean.replace(/[-—–=>:]+$/, '').trim();
+            if (clean) {
+              tasks.push({ text: clean, status });
+            }
+          }
+
+          if (tasks.length > 0) {
+            projList.push({ name: projName, tasks });
+          }
+        }
+      } else {
+        const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        let curProj = null;
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const isBullet = /^[-•*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line);
+          const isExplicitHeader = /[:-]+$/.test(line);
+          const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
+
+          const isProjectHeader = isExplicitHeader || (i === 0 && !hasStatus && !isBullet && lines.length > 1 && line.length < 80);
+
+          if (isProjectHeader) {
+            let cleanProjName = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
+            curProj = {
+              name: cleanProjName || defaultProjectName,
+              tasks: []
+            };
             projList.push(curProj);
-          }
+          } else {
+            if (!curProj) {
+              curProj = { name: defaultProjectName, tasks: [] };
+              projList.push(curProj);
+            }
 
-          let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
-          let status = 'Done';
+            let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
+            let status = 'Done';
 
-          if (/[-—–=>:]+\s*(wip|in\s*progress)/i.test(clean) || /\bWIP\b/i.test(clean)) {
-            status = 'WIP';
-            clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress)/i, '').replace(/\bWIP\b/i, '').trim();
-          } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
-            status = 'Done';
-            clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
-          }
+            if (/[-—–=>:]+\s*(wip|in\s*progress|working)/i.test(clean) || /\bWIP\b/i.test(clean)) {
+              status = 'WIP';
+              clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working)/i, '').replace(/\bWIP\b/i, '').trim();
+            } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
+              status = 'Done';
+              clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
+            }
 
-          clean = clean.replace(/[-—–=>:]+$/, '').trim();
-          if (clean) {
-            curProj.tasks.push({ text: clean, status });
+            clean = clean.replace(/[-—–=>:]+$/, '').trim();
+            if (clean) {
+              curProj.tasks.push({ text: clean, status });
+            }
           }
         }
       }
@@ -583,7 +731,8 @@ app.post('/api/submit-task', (req, res) => {
       name: memberName,
       role: memberRole,
       note: note || '',
-      projects: parsedProjects
+      projects: parsedProjects,
+      updatedAt: new Date().toISOString()
     };
 
     // Replace or append
@@ -595,6 +744,8 @@ app.post('/api/submit-task', (req, res) => {
     }
 
     draft.teamData = sortTeamDataByRoster(draft.teamData);
+    draft.version = (draft.version || 0) + 1;
+    draft.lastUpdated = new Date().toISOString();
     fs.writeFileSync(DRAFT_FILE, JSON.stringify(draft, null, 2));
 
     // Log to SUBMISSIONS_FILE for historical filtering (Daily/Weekly/Monthly)
@@ -628,7 +779,19 @@ app.post('/api/submit-task', (req, res) => {
       console.error('Error recording submission log:', subErr.message);
     }
 
-    res.json({ success: true, message: `Tasks for ${member} across ${parsedProjects.length} project(s) recorded!` });
+    // Instantly notify Admin via Web Push
+    try {
+      sendPushToAdmins({
+        title: `📋 ${member} Updated Tasks`,
+        body: `${member} just updated/submitted their daily task report (${parsedProjects.length} project(s)).`,
+        url: '/',
+        tag: `task-submit-${memberName}`
+      }).catch(err => console.error('Admin push notification error:', err.message));
+    } catch (pushErr) {
+      console.error('Error dispatching admin push:', pushErr.message);
+    }
+
+    res.json({ success: true, message: `Tasks for ${member} across ${parsedProjects.length} project(s) recorded!`, draft, version: draft.version, lastUpdated: draft.lastUpdated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -638,11 +801,11 @@ app.post('/api/submit-task', (req, res) => {
 app.get('/api/draft', (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[],"version":0}');
     if (Array.isArray(draft.teamData)) {
       draft.teamData = sortTeamDataByRoster(draft.teamData);
     }
-    res.json({ success: true, draft });
+    res.json({ success: true, draft, version: draft.version || 0, lastUpdated: draft.lastUpdated || '' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -650,19 +813,107 @@ app.get('/api/draft', (req, res) => {
 
 app.post('/api/draft', (req, res) => {
   try {
-    const { date, teamData } = req.body;
+    const { date, teamData, baseVersion, clientTimestamp, forceOverwrite } = req.body;
     const targetDate = date || getFormattedToday();
-    const sortedTeamData = sortTeamDataByRoster(teamData || []);
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: targetDate, teamData: sortedTeamData, lastUpdated: new Date().toISOString() }, null, 2));
+    const incomingTeamData = Array.isArray(teamData) ? teamData : [];
 
-    // Sync teamData to submissions_log.json
+    let serverDraft = { date: targetDate, teamData: [], version: 0 };
     try {
-      if (Array.isArray(teamData) && teamData.length > 0) {
+      if (fs.existsSync(DRAFT_FILE)) {
+        serverDraft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[],"version":0}');
+      }
+    } catch (e) { }
+
+    let finalTeamData = [];
+
+    if (forceOverwrite || serverDraft.date !== targetDate || !Array.isArray(serverDraft.teamData) || serverDraft.teamData.length === 0) {
+      // Direct update when forcing or starting new date
+      finalTeamData = incomingTeamData.map(m => ({
+        ...m,
+        updatedAt: m.updatedAt || new Date().toISOString()
+      }));
+    } else {
+      // Smart member-level merge to prevent stale client overwriting recent user submissions
+      const serverMembersMap = new Map();
+      serverDraft.teamData.forEach(m => {
+        if (m && m.name) serverMembersMap.set(m.name.toUpperCase(), m);
+      });
+
+      const clientMembersMap = new Map();
+      incomingTeamData.forEach(m => {
+        if (m && m.name) clientMembersMap.set(m.name.toUpperCase(), m);
+      });
+
+      const clientTime = clientTimestamp ? new Date(clientTimestamp).getTime() : 0;
+      const mergedMembers = new Map();
+
+      // Check all server members
+      for (const [name, sMember] of serverMembersMap.entries()) {
+        const cMember = clientMembersMap.get(name);
+        const sUpdateTime = sMember.updatedAt ? new Date(sMember.updatedAt).getTime() : 0;
+
+        if (!cMember) {
+          // Member missing in client payload:
+          // If server was updated recently (after client snapshot/base version), preserve server member!
+          if (sUpdateTime > clientTime || (serverDraft.version && baseVersion && serverDraft.version > baseVersion)) {
+            mergedMembers.set(name, sMember);
+          }
+          // Otherwise, admin intentionally removed the member
+        } else {
+          // Member present in both:
+          // Compare member content
+          const sContent = JSON.stringify({ role: sMember.role || '', note: sMember.note || '', projects: sMember.projects || [] });
+          const cContent = JSON.stringify({ role: cMember.role || '', note: cMember.note || '', projects: cMember.projects || [] });
+
+          if (sContent === cContent) {
+            // No changes
+            mergedMembers.set(name, sMember);
+          } else if (sUpdateTime > clientTime && clientTime > 0) {
+            // Server member was updated AFTER client's edit/sync time (e.g. member submitted new task via /submit)
+            // Preserve the server's newer submission!
+            mergedMembers.set(name, sMember);
+          } else {
+            // Client edited this member: apply client changes with new updatedAt
+            mergedMembers.set(name, {
+              ...cMember,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      // Check for newly added members by client
+      for (const [name, cMember] of clientMembersMap.entries()) {
+        if (!mergedMembers.has(name)) {
+          mergedMembers.set(name, {
+            ...cMember,
+            updatedAt: new Date().toISOString()
+          });
+        }
+      }
+
+      finalTeamData = Array.from(mergedMembers.values());
+    }
+
+    const sortedTeamData = sortTeamDataByRoster(finalTeamData);
+    const newVersion = (serverDraft.version || 0) + 1;
+
+    const updatedDraft = {
+      date: targetDate,
+      teamData: sortedTeamData,
+      version: newVersion,
+      lastUpdated: new Date().toISOString()
+    };
+    fs.writeFileSync(DRAFT_FILE, JSON.stringify(updatedDraft, null, 2));
+
+    // Sync final merged teamData to submissions_log.json
+    try {
+      if (Array.isArray(sortedTeamData) && sortedTeamData.length > 0) {
         let submissions = [];
         if (fs.existsSync(SUBMISSIONS_FILE)) {
           submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
         }
-        teamData.forEach(m => {
+        sortedTeamData.forEach(m => {
           if (!m.name) return;
           const mName = m.name.toUpperCase();
           const existingIdx = submissions.findIndex(s =>
@@ -676,7 +927,7 @@ app.post('/api/draft', (req, res) => {
             projects: m.projects || [],
             date: targetDate,
             isoDate: getIsoDate(),
-            timestamp: new Date().toISOString()
+            timestamp: m.updatedAt || new Date().toISOString()
           };
           if (existingIdx >= 0) {
             submissions[existingIdx] = rec;
@@ -688,7 +939,7 @@ app.post('/api/draft', (req, res) => {
       }
     } catch (e) { }
 
-    res.json({ success: true, message: 'Draft saved' });
+    res.json({ success: true, message: 'Draft saved', draft: updatedDraft, version: newVersion, lastUpdated: updatedDraft.lastUpdated });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -837,10 +1088,125 @@ app.get('/api/history', (req, res) => {
   }
 });
 
+// Push Notification Endpoints
+app.get('/api/push/public-key', (req, res) => {
+  try {
+    res.json({ success: true, publicKey: vapidKeys.publicKey });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  try {
+    const { subscription, role, member } = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ success: false, error: 'Subscription endpoint is required.' });
+    }
+    const subs = getPushSubscriptions();
+    const existingIdx = subs.findIndex(s => s.subscription && s.subscription.endpoint === subscription.endpoint);
+    const subRecord = {
+      id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      subscription: subscription,
+      role: role || 'employee',
+      member: member || '',
+      updatedAt: new Date().toISOString()
+    };
+    if (existingIdx >= 0) {
+      subs[existingIdx] = subRecord;
+    } else {
+      subs.push(subRecord);
+    }
+    savePushSubscriptions(subs);
+    res.json({ success: true, message: 'Push notification subscription registered!' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) {
+      return res.status(400).json({ success: false, error: 'Endpoint is required.' });
+    }
+    const subs = getPushSubscriptions();
+    const filtered = subs.filter(s => s.subscription && s.subscription.endpoint !== endpoint);
+    savePushSubscriptions(filtered);
+    res.json({ success: true, message: 'Unsubscribed from push notifications.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const { role, title, body } = req.body;
+    const testPayload = {
+      title: title || '🧪 Scrum Notification Test',
+      body: body || (role === 'admin' ? 'Live Admin alert is working!' : 'Daily 6:00 PM task reminder is working!'),
+      url: role === 'admin' ? '/' : '/submit',
+      tag: 'test-push-notification'
+    };
+    let count = 0;
+    if (role === 'admin') {
+      count = await sendPushToAdmins(testPayload);
+    } else {
+      count = await sendPushToEmployees(testPayload);
+    }
+    res.json({ success: true, message: `Test push sent to ${count} ${role || 'employee'} device(s)!` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // -----------------------------------------------------------------------------
-// Built-in 6:28 PM Auto-Cron Dispatcher
+// Built-in 6:00 PM (Mon-Fri) Working Day Push Reminder & 6:28 PM Auto-Cron
 // -----------------------------------------------------------------------------
 let lastDispatchedDate = '';
+let last6pmReminderDate = '';
+
+function check6pmEmployeeReminder() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const targetReminderTime = config.employeeReminderTime || '18:00';
+
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const weekdayStr = parts.find(p => p.type === 'weekday')?.value || '';
+    const hour = parts.find(p => p.type === 'hour')?.value || '';
+    const minute = parts.find(p => p.type === 'minute')?.value || '';
+    const timeStr = `${hour}:${minute}`;
+    const todayDate = getFormattedToday();
+
+    // Monday through Friday: Mon, Tue, Wed, Thu, Fri
+    const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
+
+    if (isWorkingDay && timeStr === targetReminderTime && last6pmReminderDate !== todayDate) {
+      last6pmReminderDate = todayDate;
+      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Working Day Push Reminder to Employees...`);
+      sendPushToEmployees({
+        title: `⏰ Daily Task Reminder (${targetReminderTime})`,
+        body: 'Reminder: Please submit or update your daily task status report before the 6:28 PM cutoff!',
+        url: '/submit',
+        tag: 'employee-task-reminder'
+      }).then(count => {
+        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} employee device(s).`);
+      }).catch(err => {
+        console.error('Error dispatching push reminder:', err.message);
+      });
+    }
+  } catch (err) {
+    console.error('Error in employee reminder cron:', err.message);
+  }
+}
 
 function buildFormattedOutput(draft) {
   let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${draft.date || getFormattedToday()}\n\n`;
@@ -864,10 +1230,10 @@ function buildFormattedOutput(draft) {
         }
         (proj.tasks || []).forEach(t => {
           let tText = (t.text || '').trim();
-          if (t.status === 'Done') output += `${tText} => Done\n`;
-          else if (t.status === 'WIP') output += `${tText} => WIP\n`;
-          else if (t.status === 'In Progress') output += `${tText} : In-progress\n`;
-          else output += `${tText}\n`;
+          if (t.status === 'Done') output += `• ${tText} => Done\n`;
+          else if (t.status === 'WIP') output += `• ${tText} => WIP\n`;
+          else if (t.status === 'In Progress') output += `• ${tText} : In-progress\n`;
+          else output += `• ${tText}\n`;
         });
         output += `\n`;
       });
@@ -926,7 +1292,26 @@ async function checkAndAutoDispatch() {
   }
 }
 
-setInterval(checkAndAutoDispatch, 30000); // Check every 30 seconds
+// Background scheduler running every 30 seconds
+setInterval(() => {
+  check6pmEmployeeReminder();
+  checkAndAutoDispatch();
+}, 30000);
+
+// Vercel Cron Endpoint for 6:00 PM Mon-Fri employee push reminder
+app.get('/api/cron-reminder', async (req, res) => {
+  try {
+    const count = await sendPushToEmployees({
+      title: '⏰ Daily Task Reminder (6:00 PM)',
+      body: 'Reminder: Please submit or update your daily task status report before the 6:28 PM cutoff!',
+      url: '/submit',
+      tag: 'employee-task-reminder'
+    });
+    return res.json({ success: true, message: `6:00 PM employee push reminder dispatched to ${count} device(s)!` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Vercel Cron Endpoint for 6:28 PM auto-dispatch
 app.get('/api/cron-dispatch', async (req, res) => {

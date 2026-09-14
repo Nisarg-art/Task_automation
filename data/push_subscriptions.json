@@ -1,0 +1,16 @@
+[
+  {
+    "id": "sub-1789377222729-42941",
+    "subscription": {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/enbtZANQ0r8:APA91bFhYN_izm-WX0eU6E1il4Oys5y2qa42o1eVJyRGgh_Fxlgz5JAoslQbxzIzlEpEzzcmXG8knGXzEXytESPmzdgABOORv4ee3VVTJK3ISLjs3Vp3GNEPa47qeYMJYf3CesW-ML6W",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BFgQimHgFW4sfaU2ETjNkqplSZ1xaY8YmLGpp7UnZ_fuWjcdSpjZXOWRiV0Ln5cYzmV3o6TUTptUmQhfitg6HgE",
+        "auth": "yUPoD51NBvEfV5jK765Jgw"
+      }
+    },
+    "role": "admin",
+    "member": "Nisarg (Admin)",
+    "updatedAt": "2026-09-14T09:13:42.730Z"
+  }
+]

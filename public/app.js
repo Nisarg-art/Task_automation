@@ -264,6 +264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupFilterEventListeners();
   setupAdminAuthListeners();
   startReminderClock();
+  initAdminPushServiceWorker();
 });
 
 function checkAdminAuth() {
@@ -348,7 +349,7 @@ function setupEventListeners() {
   reportDateInput.addEventListener('input', (e) => {
     state.date = e.target.value.trim() || getFormattedToday();
     generateFormattedOutput();
-    saveTodayDraft();
+    saveTodayDraft(true);
   });
 
   // Manual Live Sync Button
@@ -388,7 +389,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
     renderBuilder();
     generateFormattedOutput();
     renderChecklistTracker();
-    saveTodayDraft();
+    saveTodayDraft(true);
     showToast('Parsed and updated today\'s master report!', 'success');
   });
 
@@ -399,7 +400,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
     renderBuilder();
     generateFormattedOutput();
     renderChecklistTracker();
-    saveTodayDraft();
+    saveTodayDraft(true);
     showToast('Loaded 09/09 sample status report!', 'info');
   });
 
@@ -430,7 +431,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
     renderBuilder();
     generateFormattedOutput();
     renderChecklistTracker();
-    saveTodayDraft();
+    saveTodayDraft(true);
   });
 
   // Copy Formatted Output
@@ -490,7 +491,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
     renderBuilder();
     generateFormattedOutput();
     renderChecklistTracker();
-    saveTodayDraft();
+    saveTodayDraft(true);
   });
 
   btnPreloadTeam.addEventListener('click', () => {
@@ -499,7 +500,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
     renderBuilder();
     generateFormattedOutput();
     renderChecklistTracker();
-    saveTodayDraft();
+    saveTodayDraft(true);
     showToast('Loaded full team template!', 'success');
   });
 
@@ -511,7 +512,7 @@ Drive History G-Force Distribution Screen UI => WIP`;
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
-      saveTodayDraft();
+      saveTodayDraft(true);
       showToast('Cleared today\'s report draft', 'info');
     }
   });
@@ -685,7 +686,7 @@ function mergeSingleUpdate() {
   renderBuilder();
   generateFormattedOutput();
   renderChecklistTracker();
-  saveTodayDraft();
+  saveTodayDraft(true);
 
   singleChatInput.value = '';
   showToast(`✓ Merged update for ${parsedMembers.map(m => m.name).join(', ')} into today's report!`, 'success');
@@ -962,25 +963,25 @@ function generateFormattedOutput() {
           htmlPreview += `<strong class="header-bold">*${cleanProjName}:-*</strong>\n\n`;
         }
 
-        // Render tasks
+        // Render tasks with bullet points
         if (proj.tasks && proj.tasks.length > 0) {
           proj.tasks.forEach(t => {
             let taskText = t.text.trim();
             if (t.status === 'Done') {
               totalDone++;
-              plainText += `${taskText} => Done\n`;
-              htmlPreview += `${taskText} => <span style="color: #10b981; font-weight: 600;">Done</span>\n`;
+              plainText += `• ${taskText} => Done\n`;
+              htmlPreview += `• ${taskText} => <span style="color: #10b981; font-weight: 600;">Done</span>\n`;
             } else if (t.status === 'WIP') {
               totalWIP++;
-              plainText += `${taskText} => WIP\n`;
-              htmlPreview += `${taskText} => <span style="color: #f59e0b; font-weight: 600;">WIP</span>\n`;
+              plainText += `• ${taskText} => WIP\n`;
+              htmlPreview += `• ${taskText} => <span style="color: #f59e0b; font-weight: 600;">WIP</span>\n`;
             } else if (t.status === 'In Progress') {
               totalWIP++;
-              plainText += `${taskText} : In-progress\n`;
-              htmlPreview += `${taskText} : <span style="color: #f59e0b; font-weight: 600;">In-progress</span>\n`;
+              plainText += `• ${taskText} : In-progress\n`;
+              htmlPreview += `• ${taskText} : <span style="color: #f59e0b; font-weight: 600;">In-progress</span>\n`;
             } else {
-              plainText += `${taskText}\n`;
-              htmlPreview += `${taskText}\n`;
+              plainText += `• ${taskText}\n`;
+              htmlPreview += `• ${taskText}\n`;
             }
           });
         }
@@ -1038,10 +1039,16 @@ function renderBuilder() {
     nameInput.className = 'input-field input-name';
     nameInput.value = member.name;
     nameInput.addEventListener('input', (e) => {
+      hasUnsavedChanges = true;
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       member.name = e.target.value.toUpperCase();
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       generateFormattedOutput();
       renderChecklistTracker();
-      saveTodayDraft();
+      saveTodayDraft(false);
+    });
+    nameInput.addEventListener('blur', () => {
+      if (hasUnsavedChanges) saveTodayDraft(true);
     });
 
     const roleInput = document.createElement('input');
@@ -1050,9 +1057,14 @@ function renderBuilder() {
     roleInput.placeholder = 'Role (e.g. Nodejs Developer)';
     roleInput.value = member.role;
     roleInput.addEventListener('input', (e) => {
+      hasUnsavedChanges = true;
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       member.role = e.target.value;
       generateFormattedOutput();
-      saveTodayDraft();
+      saveTodayDraft(false);
+    });
+    roleInput.addEventListener('blur', () => {
+      if (hasUnsavedChanges) saveTodayDraft(true);
     });
 
     const noteSelect = document.createElement('select');
@@ -1069,9 +1081,11 @@ function renderBuilder() {
       noteSelect.appendChild(optEl);
     });
     noteSelect.addEventListener('change', (e) => {
+      hasUnsavedChanges = true;
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       member.note = e.target.value;
       generateFormattedOutput();
-      saveTodayDraft();
+      saveTodayDraft(true);
     });
 
     infoInputs.appendChild(nameInput);
@@ -1082,11 +1096,13 @@ function renderBuilder() {
     btnDeleteMember.className = 'btn btn-xs btn-ghost text-red';
     btnDeleteMember.innerHTML = '&times; Remove';
     btnDeleteMember.addEventListener('click', () => {
+      hasUnsavedChanges = true;
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       state.teamData.splice(mIdx, 1);
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
-      saveTodayDraft();
+      saveTodayDraft(true);
     });
 
     cardHeader.appendChild(infoInputs);
@@ -1109,29 +1125,38 @@ function renderBuilder() {
       projInput.className = 'input-field input-project';
       projInput.value = proj.name;
       projInput.addEventListener('input', (e) => {
+        hasUnsavedChanges = true;
+        if (member.name) editedMemberNames.add(member.name.toUpperCase());
         proj.name = e.target.value;
         generateFormattedOutput();
-        saveTodayDraft();
+        saveTodayDraft(false);
+      });
+      projInput.addEventListener('blur', () => {
+        if (hasUnsavedChanges) saveTodayDraft(true);
       });
 
       const btnAddTask = document.createElement('button');
       btnAddTask.className = 'btn btn-xs btn-outline';
       btnAddTask.textContent = '+ Add Task';
       btnAddTask.addEventListener('click', () => {
+        hasUnsavedChanges = true;
+        if (member.name) editedMemberNames.add(member.name.toUpperCase());
         proj.tasks.push({ text: 'New task update', status: 'Done' });
         renderBuilder();
         generateFormattedOutput();
-        saveTodayDraft();
+        saveTodayDraft(true);
       });
 
       const btnDeleteProj = document.createElement('button');
       btnDeleteProj.className = 'btn btn-xs btn-ghost text-red';
       btnDeleteProj.textContent = 'Del Proj';
       btnDeleteProj.addEventListener('click', () => {
+        hasUnsavedChanges = true;
+        if (member.name) editedMemberNames.add(member.name.toUpperCase());
         member.projects.splice(pIdx, 1);
         renderBuilder();
         generateFormattedOutput();
-        saveTodayDraft();
+        saveTodayDraft(true);
       });
 
       projHeader.appendChild(projInput);
@@ -1154,9 +1179,14 @@ function renderBuilder() {
         taskInput.className = 'task-input';
         taskInput.value = t.text;
         taskInput.addEventListener('input', (e) => {
+          hasUnsavedChanges = true;
+          if (member.name) editedMemberNames.add(member.name.toUpperCase());
           t.text = e.target.value;
           generateFormattedOutput();
-          saveTodayDraft();
+          saveTodayDraft(false);
+        });
+        taskInput.addEventListener('blur', () => {
+          if (hasUnsavedChanges) saveTodayDraft(true);
         });
 
         const statusSelect = document.createElement('select');
@@ -1170,19 +1200,23 @@ function renderBuilder() {
         });
 
         statusSelect.addEventListener('change', (e) => {
+          hasUnsavedChanges = true;
+          if (member.name) editedMemberNames.add(member.name.toUpperCase());
           t.status = e.target.value;
           generateFormattedOutput();
-          saveTodayDraft();
+          saveTodayDraft(true);
         });
 
         const btnDelTask = document.createElement('button');
         btnDelTask.className = 'btn btn-xs btn-ghost text-red';
         btnDelTask.innerHTML = '&times;';
         btnDelTask.addEventListener('click', () => {
+          hasUnsavedChanges = true;
+          if (member.name) editedMemberNames.add(member.name.toUpperCase());
           proj.tasks.splice(tIdx, 1);
           renderBuilder();
           generateFormattedOutput();
-          saveTodayDraft();
+          saveTodayDraft(true);
         });
 
         taskRow.appendChild(taskInput);
@@ -1200,10 +1234,12 @@ function renderBuilder() {
     btnAddProj.style.marginTop = '6px';
     btnAddProj.textContent = '+ Add Another Project';
     btnAddProj.addEventListener('click', () => {
+      hasUnsavedChanges = true;
+      if (member.name) editedMemberNames.add(member.name.toUpperCase());
       member.projects.push({ name: 'New Project', tasks: [{ text: 'Task 1', status: 'Done' }] });
       renderBuilder();
       generateFormattedOutput();
-      saveTodayDraft();
+      saveTodayDraft(true);
     });
     card.appendChild(btnAddProj);
 
@@ -1378,34 +1414,201 @@ async function sendToGoogleChat() {
 }
 
 // -----------------------------------------------------------------------------
-// Daily Draft Persistence & Real-Time Live Sync
+// Daily Draft Persistence & Real-Time Live Sync (Conflict-Free & Debounced)
 // -----------------------------------------------------------------------------
 let lastDraftHash = '';
+let lastSyncedVersion = 0;
 let isUserTyping = false;
+let isSaving = false;
+let lastLocalEditTime = 0;
+let saveDebounceTimer = null;
+let pendingSave = false;
+let hasUnsavedChanges = false;
+let editedMemberNames = new Set();
 
-// Track when user is typing in the builder to avoid interrupting their typing
+// Track when user is typing or interacting with inputs to avoid interrupting their work
 document.addEventListener('input', (e) => {
-  if (e.target.closest('#builder-tab') || e.target.id === 'rawTextInput') {
+  if (e.target.closest('#builder-tab') || e.target.id === 'rawTextInput' || e.target.closest('#single-drop-tab')) {
     isUserTyping = true;
+    hasUnsavedChanges = true;
+    lastLocalEditTime = Date.now();
     clearTimeout(window.typingTimeout);
     window.typingTimeout = setTimeout(() => {
       isUserTyping = false;
-    }, 3000);
+    }, 2500);
   }
 });
 
+document.addEventListener('focusin', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+    if (e.target.closest('#builder-tab') || e.target.id === 'rawTextInput' || e.target.closest('#single-drop-tab')) {
+      isUserTyping = true;
+      lastLocalEditTime = Date.now();
+    }
+  }
+});
+
+document.addEventListener('focusout', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+    if (e.target.closest('#builder-tab') || e.target.id === 'rawTextInput' || e.target.closest('#single-drop-tab')) {
+      // Only flush save on blur if there were actual unsaved local changes
+      if (hasUnsavedChanges) {
+        saveTodayDraft(true);
+      }
+      setTimeout(() => {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && activeTag !== 'SELECT') {
+          isUserTyping = false;
+        }
+      }, 500);
+    }
+  }
+});
+
+async function saveTodayDraft(immediate = false, forceOverwrite = false) {
+  lastLocalEditTime = Date.now();
+  hasUnsavedChanges = true;
+  
+  if (!immediate) {
+    if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(() => {
+      executeSaveTodayDraft(forceOverwrite);
+    }, 400);
+    return;
+  }
+
+  if (saveDebounceTimer) {
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = null;
+  }
+  await executeSaveTodayDraft(forceOverwrite);
+}
+
+async function executeSaveTodayDraft(forceOverwrite = false) {
+  if (isSaving) {
+    pendingSave = true;
+    return;
+  }
+
+  const snapshotDate = state.date;
+  const snapshotData = JSON.parse(JSON.stringify(state.teamData));
+  const snapshotHash = JSON.stringify({ date: snapshotDate || '', teamData: sortTeamDataByRoster(snapshotData) });
+
+  // If there are no unsaved changes and hash matches, don't perform redundant network writes
+  if (!hasUnsavedChanges && !forceOverwrite && snapshotHash === lastDraftHash) {
+    return;
+  }
+
+  isSaving = true;
+  pendingSave = false;
+
+  try {
+    const res = await fetch('/api/draft', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      },
+      body: JSON.stringify({ 
+        date: snapshotDate, 
+        teamData: snapshotData,
+        baseVersion: lastSyncedVersion,
+        clientTimestamp: new Date(lastLocalEditTime || Date.now()).toISOString(),
+        forceOverwrite: forceOverwrite
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      hasUnsavedChanges = false;
+      editedMemberNames.clear();
+      if (data.version) lastSyncedVersion = data.version;
+      if (data.draft && Array.isArray(data.draft.teamData)) {
+        state.teamData = sortTeamDataByRoster(data.draft.teamData);
+        lastDraftHash = JSON.stringify({ date: state.date || '', teamData: state.teamData });
+      } else {
+        lastDraftHash = snapshotHash;
+      }
+    }
+  } catch (err) {
+    console.error('Failed to save draft:', err);
+  } finally {
+    isSaving = false;
+    if (pendingSave) {
+      pendingSave = false;
+      executeSaveTodayDraft(forceOverwrite);
+    }
+  }
+}
+
 async function loadTodayDraft(isAutoPoll = false, forceRefresh = false) {
+  // If user is actively typing or saving, skip auto-polling UI redraw to avoid losing cursor
+  if (isAutoPoll && (isSaving || isUserTyping || (Date.now() - lastLocalEditTime < 1500))) {
+    return;
+  }
+
   try {
     const res = await fetch(`/api/draft?_t=${Date.now()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
     });
     const data = await res.json();
+    const liveSyncStatus = document.getElementById('liveSyncStatus');
+    if (liveSyncStatus) {
+      liveSyncStatus.style.opacity = '1';
+    }
+
     if (data.draft && Array.isArray(data.draft.teamData)) {
       const sortedIncoming = sortTeamDataByRoster(data.draft.teamData);
-      const currentHash = JSON.stringify(sortedIncoming);
+      const incomingHash = JSON.stringify({ date: data.draft.date || '', teamData: sortedIncoming });
+      const currentLocalHash = JSON.stringify({ date: state.date || '', teamData: sortTeamDataByRoster(state.teamData) });
 
-      if (currentHash !== lastDraftHash || forceRefresh) {
+      // If server data matches local data exactly, just sync hash & return
+      if (incomingHash === currentLocalHash) {
+        lastDraftHash = incomingHash;
+        if (data.version) lastSyncedVersion = data.version;
+        return;
+      }
+
+      // If it's an auto-poll and local edits happened very recently, do NOT overwrite
+      if (isAutoPoll && (Date.now() - lastLocalEditTime < 2000)) {
+        return;
+      }
+
+      // If admin has unsaved local changes, do NOT clobber edited members, but merge background updates from server
+      if (hasUnsavedChanges && isAutoPoll && !forceRefresh) {
+        let changed = false;
+        const localMembers = [...state.teamData];
+        sortedIncoming.forEach(inMember => {
+          const mUpper = inMember.name ? inMember.name.toUpperCase() : '';
+          // Only update if admin has NOT edited this member locally
+          if (mUpper && !editedMemberNames.has(mUpper)) {
+            const locIdx = localMembers.findIndex(m => m.name && m.name.toUpperCase() === mUpper);
+            if (locIdx >= 0) {
+              if (JSON.stringify(localMembers[locIdx]) !== JSON.stringify(inMember)) {
+                localMembers[locIdx] = inMember;
+                changed = true;
+              }
+            } else {
+              localMembers.push(inMember);
+              changed = true;
+            }
+          }
+        });
+
+        if (changed) {
+          state.teamData = sortTeamDataByRoster(localMembers);
+          renderBuilder();
+          generateFormattedOutput();
+          renderChecklistTracker();
+          if (typeof fetchAndRenderSubmissions === 'function') {
+            fetchAndRenderSubmissions();
+          }
+        }
+        return;
+      }
+
+      if (incomingHash !== lastDraftHash || forceRefresh) {
         // Detect newly submitted members for notification
         if (isAutoPoll && state.teamData && state.teamData.length > 0) {
           const oldNames = state.teamData.map(m => m.name);
@@ -1413,12 +1616,21 @@ async function loadTodayDraft(isAutoPoll = false, forceRefresh = false) {
           const added = newNames.filter(n => !oldNames.includes(n));
           if (added.length > 0) {
             showToast(`🔔 Live Update: ${added.join(', ')} submitted their daily status!`, 'success');
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+              try {
+                new Notification(`📋 ${added.join(', ')} Submitted Tasks`, {
+                  body: `New daily status report submitted for today's 6:28 PM report.`,
+                  icon: '/favicon.ico'
+                });
+              } catch (e) { }
+            }
           } else {
             showToast(`🔔 Live Update: Daily tasks updated!`, 'info');
           }
         }
 
-        lastDraftHash = currentHash;
+        lastDraftHash = incomingHash;
+        if (data.version) lastSyncedVersion = data.version;
         state.teamData = sortedIncoming;
         if (data.draft.date) {
           state.date = data.draft.date;
@@ -1453,39 +1665,28 @@ async function loadTodayDraft(isAutoPoll = false, forceRefresh = false) {
   }
 }
 
-// Poll server every 1.5 seconds for instant live updates from /submit
+// Poll server every 2 seconds for live updates from /submit
 setInterval(() => {
   loadTodayDraft(true);
-}, 1500);
+}, 2000);
 
-// Sync instantly when user switches back to this browser tab
+// Sync when user switches back to this browser tab (only if not actively editing)
 window.addEventListener('focus', () => {
-  loadTodayDraft(false, true);
-  if (typeof fetchAndRenderSubmissions === 'function') {
-    fetchAndRenderSubmissions();
-  }
-});
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
+  if (!hasUnsavedChanges && Date.now() - lastLocalEditTime > 1500) {
     loadTodayDraft(false, true);
     if (typeof fetchAndRenderSubmissions === 'function') {
       fetchAndRenderSubmissions();
     }
   }
 });
-
-async function saveTodayDraft() {
-  try {
-    lastDraftHash = JSON.stringify(state.teamData);
-    await fetch('/api/draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: state.date, teamData: state.teamData })
-    });
-  } catch (err) {
-    console.error('Failed to save draft:', err);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !hasUnsavedChanges && Date.now() - lastLocalEditTime > 1500) {
+    loadTodayDraft(false, true);
+    if (typeof fetchAndRenderSubmissions === 'function') {
+      fetchAndRenderSubmissions();
+    }
   }
-}
+});
 
 // -----------------------------------------------------------------------------
 // Calendar & Member Filter Engine (Daily, Weekly, Monthly & User Dropdown)
@@ -1634,7 +1835,7 @@ function setupFilterEventListeners() {
         renderBuilder();
         generateFormattedOutput();
         renderChecklistTracker();
-        saveTodayDraft();
+        saveTodayDraft(true);
         showToast(`⚡ Loaded ${state.filter.results.length} member(s) into Master Draft!`, 'success');
         document.querySelector('[data-tab="single-drop-tab"]').click();
       }
@@ -1839,7 +2040,7 @@ function renderSubmissionCards(submissions) {
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
-      saveTodayDraft();
+      saveTodayDraft(true);
       showToast(`Merged ${item.member}'s update into Live Master Draft!`, 'success');
     });
 
@@ -1935,9 +2136,9 @@ function buildSingleMemberText(item) {
       (proj.tasks || []).forEach(t => {
         let tText = typeof t === 'string' ? t : (t.text || '');
         let tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
-        if (tStatus === 'Done') output += `${tText} => Done\n`;
-        else if (tStatus === 'WIP') output += `${tText} => WIP\n`;
-        else output += `${tText}\n`;
+        if (tStatus === 'Done') output += `• ${tText} => Done\n`;
+        else if (tStatus === 'WIP') output += `• ${tText} => WIP\n`;
+        else output += `• ${tText}\n`;
       });
       output += '\n';
     });
@@ -2017,7 +2218,7 @@ function renderHistory() {
       renderBuilder();
       generateFormattedOutput();
       renderChecklistTracker();
-      saveTodayDraft();
+      saveTodayDraft(true);
       showToast('Loaded past report into editor!', 'info');
       document.querySelector('[data-tab="single-drop-tab"]').click();
     });
@@ -2068,4 +2269,193 @@ function showToast(message, type = 'success') {
   setTimeout(() => {
     toast.classList.add('hidden');
   }, 3500);
+}
+
+// -----------------------------------------------------------------------------
+// Admin Web Push Notifications (Live Employee Update Alerts & 6 PM Reminders)
+// -----------------------------------------------------------------------------
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+let adminSwRegistration = null;
+let isAdminPushSubscribed = false;
+
+async function initAdminPushServiceWorker() {
+  const btnAdminPushToggle = document.getElementById('btnAdminPushToggle');
+  const btnAdminSettingsPushToggle = document.getElementById('btnAdminSettingsPushToggle');
+  const btnTestAdminPush = document.getElementById('btnTestAdminPush');
+  const btnTestEmployeePush = document.getElementById('btnTestEmployeePush');
+
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    try {
+      adminSwRegistration = await navigator.serviceWorker.register('/sw.js');
+      await checkAdminPushSubscription();
+    } catch (err) {
+      console.error('Admin Service Worker registration failed:', err);
+    }
+  } else {
+    if (btnAdminPushToggle) btnAdminPushToggle.style.display = 'none';
+    if (btnAdminSettingsPushToggle) btnAdminSettingsPushToggle.style.display = 'none';
+  }
+
+  if (btnAdminPushToggle) {
+    btnAdminPushToggle.addEventListener('click', toggleAdminPushSubscription);
+  }
+  if (btnAdminSettingsPushToggle) {
+    btnAdminSettingsPushToggle.addEventListener('click', toggleAdminPushSubscription);
+  }
+  if (btnTestAdminPush) {
+    btnTestAdminPush.addEventListener('click', () => triggerPushTest('admin'));
+  }
+  if (btnTestEmployeePush) {
+    btnTestEmployeePush.addEventListener('click', () => triggerPushTest('employee'));
+  }
+}
+
+async function checkAdminPushSubscription() {
+  if (!adminSwRegistration) return;
+  try {
+    const sub = await adminSwRegistration.pushManager.getSubscription();
+    isAdminPushSubscribed = !(sub === null);
+    updateAdminPushUI();
+  } catch (e) {
+    console.error('Error checking admin push subscription:', e);
+  }
+}
+
+function updateAdminPushUI() {
+  const btnAdminPushToggle = document.getElementById('btnAdminPushToggle');
+  const adminPushIcon = document.getElementById('adminPushIcon');
+  const adminPushText = document.getElementById('adminPushText');
+  const adminSettingsPushText = document.getElementById('adminSettingsPushText');
+  const btnAdminSettingsPushToggle = document.getElementById('btnAdminSettingsPushToggle');
+
+  if (isAdminPushSubscribed) {
+    if (adminPushIcon) adminPushIcon.textContent = '🔔';
+    if (adminPushText) adminPushText.textContent = 'Push Alerts On';
+    if (btnAdminPushToggle) {
+      btnAdminPushToggle.classList.add('btn-primary');
+      btnAdminPushToggle.classList.remove('btn-secondary');
+      btnAdminPushToggle.title = 'Push alerts active! Click to disable.';
+    }
+    if (adminSettingsPushText) adminSettingsPushText.textContent = '✓ Push Alerts Active';
+    if (btnAdminSettingsPushToggle) {
+      btnAdminSettingsPushToggle.classList.add('btn-primary');
+      btnAdminSettingsPushToggle.classList.remove('btn-outline');
+    }
+  } else {
+    if (adminPushIcon) adminPushIcon.textContent = '🔕';
+    if (adminPushText) adminPushText.textContent = 'Enable Push';
+    if (btnAdminPushToggle) {
+      btnAdminPushToggle.classList.remove('btn-primary');
+      btnAdminPushToggle.classList.add('btn-secondary');
+      btnAdminPushToggle.title = 'Click to enable instant push notifications on this device';
+    }
+    if (adminSettingsPushText) adminSettingsPushText.textContent = 'Enable Push';
+    if (btnAdminSettingsPushToggle) {
+      btnAdminSettingsPushToggle.classList.remove('btn-primary');
+      btnAdminSettingsPushToggle.classList.add('btn-outline');
+    }
+  }
+}
+
+async function toggleAdminPushSubscription() {
+  if (!adminSwRegistration) {
+    showToast('Push notifications not supported in this browser', 'warning');
+    return;
+  }
+
+  try {
+    if (isAdminPushSubscribed) {
+      const sub = await adminSwRegistration.pushManager.getSubscription();
+      if (sub) {
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint })
+        });
+        await sub.unsubscribe();
+      }
+      isAdminPushSubscribed = false;
+      showToast('Admin Push Alerts disabled on this device', 'info');
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showToast('Notification permission was blocked in browser settings', 'error');
+        return;
+      }
+
+      const res = await fetch('/api/push/public-key');
+      const data = await res.json();
+      if (!data.success || !data.publicKey) throw new Error('Could not fetch public VAPID key');
+
+      const appServerKey = urlBase64ToUint8Array(data.publicKey);
+      const subscription = await adminSwRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appServerKey
+      });
+
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subscription,
+          role: 'admin',
+          member: 'Nisarg (Admin)'
+        })
+      });
+
+      isAdminPushSubscribed = true;
+      showToast('🔔 Admin Push Alerts enabled! You will be notified whenever employees submit tasks.', 'success');
+    }
+  } catch (err) {
+    console.error('Error toggling admin push:', err);
+    showToast('Failed to update push alerts: ' + err.message, 'error');
+  } finally {
+    updateAdminPushUI();
+  }
+}
+
+async function triggerPushTest(role) {
+  const resultEl = document.getElementById('pushTestResult');
+  if (resultEl) {
+    resultEl.classList.remove('hidden', 'success', 'error');
+    resultEl.textContent = `Dispatching test push to ${role}...`;
+  }
+
+  try {
+    const res = await fetch('/api/push/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: role })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (resultEl) {
+        resultEl.className = 'webhook-test-results success';
+        resultEl.textContent = `✓ ${data.message}`;
+      }
+      showToast(data.message, 'success');
+    } else {
+      if (resultEl) {
+        resultEl.className = 'webhook-test-results error';
+        resultEl.textContent = `✗ ${data.error}`;
+      }
+      showToast(data.error || 'Test failed', 'error');
+    }
+  } catch (err) {
+    if (resultEl) {
+      resultEl.className = 'webhook-test-results error';
+      resultEl.textContent = `✗ Test failed: ${err.message}`;
+    }
+    showToast('Push test failed: ' + err.message, 'error');
+  }
 }

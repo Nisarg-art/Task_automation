@@ -1,5 +1,5 @@
 {
-  "date": "11/09/2026",
+  "date": "14/09/2026",
   "teamData": [
     {
       "name": "HARSHAD",
@@ -7,18 +7,51 @@
       "note": "",
       "projects": [
         {
-          "name": "RankMyTrip",
+          "name": "rankmytrip",
           "tasks": [
             {
-              "text": "Tabbar UI",
+              "text": "test the deive in modulle",
               "status": "Done"
-            },
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KIRAN",
+      "role": "",
+      "note": "ON HALF DAY",
+      "projects": [
+        {
+          "name": "second number app",
+          "tasks": [
             {
-              "text": "Add Vehicle Screen UI",
+              "text": "test the deive in modulle",
+              "status": "WIP"
+            }
+          ]
+        },
+        {
+          "name": "General Tasks",
+          "tasks": [
+            {
+              "text": "ytest the app",
               "status": "Done"
-            },
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DHRUV",
+      "role": "",
+      "note": "",
+      "projects": [
+        {
+          "name": "reply dm",
+          "tasks": [
             {
-              "text": "Drive History G-Force Distribution Screen UI",
+              "text": "test the whole app",
               "status": "WIP"
             }
           ]
@@ -31,32 +64,17 @@
       "note": "",
       "projects": [
         {
-          "name": "Universal Second Number",
+          "name": "General Tasks",
           "tasks": [
             {
-              "text": "Investigated and resolved the application error occurring while placing calls",
-              "status": "Done"
-            },
-            {
-              "text": "Implemented inbound call handling for low-credit users, including disconnect recovery, user notification, and a prompt to purchase credits to receive calls",
-              "status": "Done"
-            },
-            {
-              "text": "Added the necessary logs to simplify future debugging and troubleshooting",
-              "status": "Done"
-            }
-          ]
-        },
-        {
-          "name": "Clover Reward Loyalty Dashboard",
-          "tasks": [
-            {
-              "text": "Investigated the feasibility of adding a filter and implemented it if supported",
+              "text": "test the whole app",
               "status": "Done"
             }
           ]
         }
       ]
     }
-  ]
+  ],
+  "version": 6,
+  "lastUpdated": "2026-09-14T05:14:58.624Z"
 }
