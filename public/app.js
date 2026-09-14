@@ -366,6 +366,18 @@ function setupEventListeners() {
     });
   }
 
+  // Lightbox Modal Close Listeners
+  const lightboxModal = document.getElementById('lightboxModal');
+  const btnLightboxClose = document.getElementById('btnLightboxClose');
+  if (btnLightboxClose) {
+    btnLightboxClose.addEventListener('click', closeAdminLightbox);
+  }
+  if (lightboxModal) {
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal) closeAdminLightbox();
+    });
+  }
+
   // Merge Single 1-on-1 Chat Update
   btnMergeSingle.addEventListener('click', mergeSingleUpdate);
 
@@ -753,7 +765,7 @@ function parseRawTasks(text) {
     if (!rawLine) continue;
 
     // Ignore top headers
-    if (/^(RESPECTED SIR|ALL PROJECT STATUS|DATE\s*:-)/i.test(rawLine)) {
+    if (/^[*_]*(RESPECTED SIR|ALL PROJECT STATUS|DATE\s*:-)/i.test(rawLine)) {
       continue;
     }
 
@@ -917,9 +929,9 @@ function parseTaskStatus(line) {
 function generateFormattedOutput() {
   state.teamData = sortTeamDataByRoster(state.teamData);
   let plainText = '';
-  plainText += `RESPECTED SIR,\n`;
-  plainText += `ALL PROJECT STATUS\n`;
-  plainText += `DATE:-${state.date}\n\n`;
+  plainText += `*RESPECTED SIR,*\n`;
+  plainText += `*ALL PROJECT STATUS*\n`;
+  plainText += `*DATE:-${state.date}*\n\n`;
 
   let htmlPreview = '';
   htmlPreview += `<strong>RESPECTED SIR,</strong>\n`;
@@ -1242,6 +1254,42 @@ function renderBuilder() {
       saveTodayDraft(true);
     });
     card.appendChild(btnAddProj);
+
+    // Attached Proof Photos / Screenshots
+    if (member.attachments && Array.isArray(member.attachments) && member.attachments.length > 0) {
+      const attachWrap = document.createElement('div');
+      attachWrap.style.marginTop = '10px';
+      attachWrap.style.paddingTop = '8px';
+      attachWrap.style.borderTop = '1px solid rgba(255, 255, 255, 0.08)';
+
+      const attachHead = document.createElement('div');
+      attachHead.style.fontSize = '0.74rem';
+      attachHead.style.color = '#38bdf8';
+      attachHead.style.fontWeight = '600';
+      attachHead.style.marginBottom = '6px';
+      attachHead.innerHTML = `📸 <span>Attached Proof / Screenshots (${member.attachments.length})</span>`;
+      attachWrap.appendChild(attachHead);
+
+      const thumbsWrap = document.createElement('div');
+      thumbsWrap.className = 'attachment-previews-wrap';
+
+      member.attachments.forEach(att => {
+        const thumb = document.createElement('div');
+        thumb.className = 'attachment-thumb-card';
+        thumb.title = `Click to zoom: ${att.name || 'Screenshot'}`;
+        const img = document.createElement('img');
+        img.src = att.dataUrl;
+        img.alt = att.name || 'Screenshot';
+        thumb.appendChild(img);
+        thumb.addEventListener('click', () => {
+          openAdminLightbox(att.dataUrl, `${member.name} - ${att.name || 'Screenshot'}`);
+        });
+        thumbsWrap.appendChild(thumb);
+      });
+
+      attachWrap.appendChild(thumbsWrap);
+      card.appendChild(attachWrap);
+    }
 
     membersContainer.appendChild(card);
   });
@@ -2112,6 +2160,45 @@ function renderSubmissionCards(submissions) {
       projContainer.appendChild(projBlock);
     });
 
+    // Attached Proof Photos / Screenshots
+    if (item.attachments && Array.isArray(item.attachments) && item.attachments.length > 0) {
+      const attachWrap = document.createElement('div');
+      attachWrap.style.marginTop = '12px';
+      attachWrap.style.paddingTop = '10px';
+      attachWrap.style.borderTop = '1px solid rgba(255, 255, 255, 0.08)';
+
+      const attachHeader = document.createElement('div');
+      attachHeader.style.fontSize = '0.78rem';
+      attachHeader.style.color = '#38bdf8';
+      attachHeader.style.fontWeight = '600';
+      attachHeader.style.marginBottom = '6px';
+      attachHeader.style.display = 'flex';
+      attachHeader.style.alignItems = 'center';
+      attachHeader.style.gap = '6px';
+      attachHeader.innerHTML = `📸 <span>Attached Proof / Screenshots (${item.attachments.length})</span>`;
+      attachWrap.appendChild(attachHeader);
+
+      const thumbsRow = document.createElement('div');
+      thumbsRow.className = 'attachment-previews-wrap';
+
+      item.attachments.forEach(att => {
+        const thumb = document.createElement('div');
+        thumb.className = 'attachment-thumb-card';
+        thumb.title = `Click to zoom: ${att.name || 'Screenshot'}`;
+        const img = document.createElement('img');
+        img.src = att.dataUrl;
+        img.alt = att.name || 'Screenshot';
+        thumb.appendChild(img);
+        thumb.addEventListener('click', () => {
+          openAdminLightbox(att.dataUrl, `${item.member} - ${att.name || 'Screenshot'}`);
+        });
+        thumbsRow.appendChild(thumb);
+      });
+
+      attachWrap.appendChild(thumbsRow);
+      projContainer.appendChild(attachWrap);
+    }
+
     card.appendChild(projContainer);
     historyResultsContainer.appendChild(card);
   });
@@ -2153,7 +2240,7 @@ function buildFormattedSummaryFromSubmissions(submissions) {
     dateTitle = `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
 
-  let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${dateTitle}\n\n`;
+  let output = `*RESPECTED SIR,*\n*ALL PROJECT STATUS*\n*DATE:-${dateTitle}*\n\n`;
   const sortedSubs = sortTeamDataByRoster(submissions);
   sortedSubs.forEach(sub => {
     output += buildSingleMemberText(sub) + '\n\n';
@@ -2238,6 +2325,27 @@ function renderHistory() {
     card.appendChild(actions);
     historyList.appendChild(card);
   });
+}
+
+// -----------------------------------------------------------------------------
+// Image Lightbox Viewer Controller
+// -----------------------------------------------------------------------------
+function openAdminLightbox(src, title) {
+  const lightboxModal = document.getElementById('lightboxModal');
+  const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxTitle = document.getElementById('lightboxTitle');
+  if (!lightboxModal) return;
+  if (lightboxImg) lightboxImg.src = src;
+  if (lightboxTitle) lightboxTitle.textContent = title ? `📸 ${title}` : '📸 Screenshot Proof';
+  lightboxModal.classList.remove('hidden');
+}
+
+function closeAdminLightbox() {
+  const lightboxModal = document.getElementById('lightboxModal');
+  const lightboxImg = document.getElementById('lightboxImg');
+  if (!lightboxModal) return;
+  lightboxModal.classList.add('hidden');
+  if (lightboxImg) lightboxImg.src = '';
 }
 
 // -----------------------------------------------------------------------------

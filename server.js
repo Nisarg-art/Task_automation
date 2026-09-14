@@ -708,7 +708,8 @@ app.get('/api/submission-status', (req, res) => {
           role: found.role || '',
           note: found.note || '',
           projects: found.projects || [],
-          rawText: rawText.trim()
+          rawText: rawText.trim(),
+          attachments: Array.isArray(found.attachments) ? found.attachments : []
         };
       }
     }
@@ -727,7 +728,7 @@ app.get('/api/submission-status', (req, res) => {
 // Member Direct Submission API from /submit (Supports Single & Multi-Projects with Auth Lock & 6:28 PM Cutoff)
 app.post('/api/submit-task', (req, res) => {
   try {
-    const { member, project, tasks, projects, note, password, token } = req.body;
+    const { member, project, tasks, projects, note, password, token, rawText, attachments } = req.body;
     if (!member) {
       return res.status(400).json({ success: false, error: 'Member name is required.' });
     }
@@ -890,11 +891,14 @@ app.post('/api/submit-task', (req, res) => {
     else if (memberName.includes('AJAY') || memberName.includes('HASTI')) memberRole = 'Designer';
     else if (memberName.includes('NISARG')) memberRole = 'QA & Scrum Master';
 
+    const validAttachments = Array.isArray(attachments) ? attachments.slice(0, 6) : [];
+
     const newMemberEntry = {
       name: memberName,
       role: memberRole,
       note: note || '',
       projects: parsedProjects,
+      attachments: validAttachments,
       updatedAt: new Date().toISOString()
     };
 
@@ -927,6 +931,7 @@ app.post('/api/submit-task', (req, res) => {
         role: memberRole,
         note: note || '',
         projects: parsedProjects,
+        attachments: validAttachments,
         date: todayDate,
         isoDate: todayIso,
         timestamp: new Date().toISOString()
@@ -1475,7 +1480,7 @@ function check6pmEmployeeReminder() {
 }
 
 function buildFormattedOutput(draft) {
-  let output = `RESPECTED SIR,\nALL PROJECT STATUS\nDATE:-${draft.date || getFormattedToday()}\n\n`;
+  let output = `*RESPECTED SIR,*\n*ALL PROJECT STATUS*\n*DATE:-${draft.date || getFormattedToday()}*\n\n`;
   const sortedMembers = sortTeamDataByRoster(draft.teamData || []);
   sortedMembers.forEach(member => {
     let roleStr = member.role ? `(${member.role})` : '';

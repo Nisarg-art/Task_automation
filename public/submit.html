@@ -457,10 +457,9 @@
       <!-- SECTION 2: SUCCESS BANNER (Shown after submit) -->
       <div id="successSection" class="success-confirmation-card hidden">
         <div class="status-check-circle">✓</div>
-        <strong id="successHeaderTitle" style="font-size: 1.15rem; color: #34d399;">Tasks Submitted
-          Successfully!</strong>
+        <strong id="successHeaderTitle" style="font-size: 1.15rem; color: #34d399;">Tasks Submitted Successfully!</strong>
         <p style="font-size: 0.85rem; color: #a7f3d0; max-width: 440px;" id="successSubDesc">
-          Your updates have been compiled into today's master status report.
+          Your daily status update has been successfully recorded. Thank you for keeping the team updated!
         </p>
         <button type="button" id="btnEditMyTasks" class="btn btn-sm btn-outline" style="margin-top: 8px;">
           ✏️ Edit / Update Today's Tasks
@@ -475,7 +474,7 @@
             <div class="locked-user-label">Submitting as Verified Employee:</div>
             <div class="locked-user-val" id="lockedMemberDisplay">HARSHAD</div>
           </div>
-          <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Switch Account</button>
+          <button type="button" class="btn btn-xs btn-ghost text-red" id="btnSwitchAccount">Logout</button>
         </div>
 
         <!-- 6:28 PM Cutoff Lock Banner -->
@@ -567,11 +566,41 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
           </select>
         </div>
 
+        <!-- Optional Photo / Screenshot Attachment Dropzone -->
+        <div class="form-group-item">
+          <label class="form-label-styled" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>📸 Attach Photos / Screenshots (Optional)</span>
+            <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 500;">Git push proof, UI updates, designs</span>
+          </label>
+          <div id="attachmentDropZone" class="attachment-dropzone">
+            <input type="file" id="fileAttachmentInput" accept="image/*" multiple style="display: none;">
+            <div style="font-size: 1.3rem; margin-bottom: 2px;">🖼️ 📋</div>
+            <div style="font-size: 0.84rem; color: #e2e8f0; font-weight: 600;">
+              Click to browse, drag & drop, or <span style="color: #60a5fa; text-decoration: underline;">Paste image (Ctrl+V)</span>
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px;">
+              Screenshots or photos (PNG, JPG, WebP)
+            </div>
+          </div>
+          <div id="attachmentPreviewsList" class="attachment-previews-wrap hidden"></div>
+        </div>
+
         <button type="submit" id="btnSubmitStatus" class="btn btn-primary btn-large" style="margin-top: 6px;">
           🚀 Submit Today's Tasks
         </button>
       </form>
 
+    </div>
+  </div>
+
+  <!-- Lightbox Modal for Full-Size Screenshot Viewing -->
+  <div id="lightboxModal" class="lightbox-modal hidden">
+    <div class="lightbox-content">
+      <div class="lightbox-top-bar">
+        <span id="lightboxTitle">📸 Screenshot Preview</span>
+        <button type="button" id="btnLightboxClose" class="btn btn-xs btn-outline" style="color: white; border-color: rgba(255,255,255,0.4);">✕ Close</button>
+      </div>
+      <img id="lightboxImg" class="lightbox-img" src="" alt="Full Resolution Screenshot">
     </div>
   </div>
 
@@ -615,6 +644,183 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
 
     let projectIndexCount = 1;
     let currentUser = null;
+    let attachedImages = []; // [ { id, name, dataUrl } ]
+
+    // Attachment DOM Elements
+    const attachmentDropZone = document.getElementById('attachmentDropZone');
+    const fileAttachmentInput = document.getElementById('fileAttachmentInput');
+    const attachmentPreviewsList = document.getElementById('attachmentPreviewsList');
+    const lightboxModal = document.getElementById('lightboxModal');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const btnLightboxClose = document.getElementById('btnLightboxClose');
+
+    // Image compression helper using Canvas (keeps uploads fast & responsive)
+    async function compressImage(file, maxWidth = 1400, maxHeight = 1400, quality = 0.8) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth || height > maxHeight) {
+              if (width > height) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              } else {
+                width = Math.round((width * maxHeight) / height);
+                height = maxHeight;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataUrl);
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleFilesSelected(files) {
+      if (!files || files.length === 0) return;
+      for (const file of files) {
+        if (!file.type || !file.type.startsWith('image/')) continue;
+        if (attachedImages.length >= 6) {
+          alert('Maximum 6 photo/screenshot attachments allowed per update.');
+          break;
+        }
+        try {
+          const compressedDataUrl = await compressImage(file);
+          attachedImages.push({
+            id: 'img-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+            name: file.name || 'Screenshot.jpg',
+            dataUrl: compressedDataUrl
+          });
+        } catch (err) {
+          console.error('Error processing image attachment:', err);
+        }
+      }
+      renderAttachmentPreviews();
+    }
+
+    function renderAttachmentPreviews() {
+      if (!attachmentPreviewsList) return;
+      attachmentPreviewsList.innerHTML = '';
+      if (attachedImages.length === 0) {
+        attachmentPreviewsList.classList.add('hidden');
+        return;
+      }
+      attachmentPreviewsList.classList.remove('hidden');
+
+      attachedImages.forEach((img, idx) => {
+        const card = document.createElement('div');
+        card.className = 'attachment-thumb-card';
+        card.title = `Click to zoom: ${img.name}`;
+
+        const imgEl = document.createElement('img');
+        imgEl.src = img.dataUrl;
+        imgEl.alt = img.name;
+        imgEl.addEventListener('click', () => {
+          openLightbox(img.dataUrl, img.name);
+        });
+
+        const btnRemove = document.createElement('button');
+        btnRemove.type = 'button';
+        btnRemove.className = 'attachment-thumb-remove';
+        btnRemove.innerHTML = '&times;';
+        btnRemove.title = 'Remove photo';
+        btnRemove.addEventListener('click', (e) => {
+          e.stopPropagation();
+          attachedImages.splice(idx, 1);
+          renderAttachmentPreviews();
+        });
+
+        card.appendChild(imgEl);
+        card.appendChild(btnRemove);
+        attachmentPreviewsList.appendChild(card);
+      });
+    }
+
+    function openLightbox(src, title) {
+      if (!lightboxModal) return;
+      lightboxImg.src = src;
+      lightboxTitle.textContent = title ? `📸 ${title}` : '📸 Screenshot Preview';
+      lightboxModal.classList.remove('hidden');
+    }
+
+    function closeLightbox() {
+      if (!lightboxModal) return;
+      lightboxModal.classList.add('hidden');
+      lightboxImg.src = '';
+    }
+
+    if (btnLightboxClose) btnLightboxClose.addEventListener('click', closeLightbox);
+    if (lightboxModal) {
+      lightboxModal.addEventListener('click', (e) => {
+        if (e.target === lightboxModal) closeLightbox();
+      });
+    }
+
+    // Dropzone & File Input listeners
+    if (attachmentDropZone) {
+      attachmentDropZone.addEventListener('click', () => {
+        if (fileAttachmentInput) fileAttachmentInput.click();
+      });
+      attachmentDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        attachmentDropZone.classList.add('dragover');
+      });
+      attachmentDropZone.addEventListener('dragleave', () => {
+        attachmentDropZone.classList.remove('dragover');
+      });
+      attachmentDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        attachmentDropZone.classList.remove('dragover');
+        if (e.dataTransfer && e.dataTransfer.files) {
+          handleFilesSelected(e.dataTransfer.files);
+        }
+      });
+    }
+
+    if (fileAttachmentInput) {
+      fileAttachmentInput.addEventListener('change', (e) => {
+        if (e.target.files) {
+          handleFilesSelected(e.target.files);
+          fileAttachmentInput.value = '';
+        }
+      });
+    }
+
+    // Direct Clipboard Paste (Ctrl+V / Cmd+V) Listener
+    document.addEventListener('paste', (e) => {
+      if (!submissionForm || submissionForm.classList.contains('hidden')) return;
+      const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+      if (!items) return;
+
+      const imageFiles = [];
+      for (const item of items) {
+        if (item.type && item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) {
+            imageFiles.push(blob);
+          }
+        }
+      }
+      if (imageFiles.length > 0) {
+        handleFilesSelected(imageFiles);
+      }
+    });
 
     // Mode Toggle Listeners
     btnModeBulk.addEventListener('click', () => {
@@ -650,6 +856,8 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
 
     function showLoginForm() {
       currentUser = null;
+      attachedImages = [];
+      renderAttachmentPreviews();
       localStorage.removeItem(AUTH_KEY);
       loginSection.classList.remove('hidden');
       submissionForm.classList.add('hidden');
@@ -681,59 +889,43 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
       }
     }
 
+    // Check if user already submitted tasks for today and populate
     async function checkSubmissionStatus(user) {
-      const lockAlertBanner = document.getElementById('lockAlertBanner');
-      const editAlertBanner = document.getElementById('editAlertBanner');
-      const modeSwitcherWrap = document.getElementById('modeSwitcherWrap');
-
       try {
-        const res = await fetch(`/api/submission-status?member=${encodeURIComponent(user.name)}&_t=${Date.now()}`, {
-          cache: 'no-store',
+        const res = await fetch(`/api/user-status?member=${encodeURIComponent(user.name)}`, {
           headers: {
-            'Authorization': `Bearer ${user.token || ''}`,
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
+            'Authorization': `Bearer ${user.token || ''}`
           }
         });
         const data = await res.json();
-        if (!data.success) return;
 
-        if (data.isLocked) {
-          lockAlertBanner.classList.remove('hidden');
-          editAlertBanner.classList.add('hidden');
-          bulkTasksInput.disabled = true;
-          attendanceSelect.disabled = true;
-          btnSubmitStatus.disabled = true;
-          btnSubmitStatus.style.opacity = '0.5';
-          btnSubmitStatus.style.cursor = 'not-allowed';
-          btnSubmitStatus.innerHTML = `🔒 Submissions Closed for Today (${data.cutoffTime || '6:28 PM'})`;
-        } else {
-          lockAlertBanner.classList.add('hidden');
-          bulkTasksInput.disabled = false;
-          attendanceSelect.disabled = false;
-          btnSubmitStatus.disabled = false;
-          btnSubmitStatus.style.opacity = '1';
-          btnSubmitStatus.style.cursor = 'pointer';
+        if (data.todayStatus && data.todayStatus.submitted) {
+          if (attendanceSelect && data.todayStatus.note !== undefined) {
+            attendanceSelect.value = data.todayStatus.note;
+          }
 
-          if (data.existingSubmission) {
-            editAlertBanner.classList.remove('hidden');
-            if (data.existingSubmission.rawText) {
-              bulkTasksInput.value = data.existingSubmission.rawText;
-            }
-            if (data.existingSubmission.note) {
-              attendanceSelect.value = data.existingSubmission.note;
-            }
-            if (Array.isArray(data.existingSubmission.projects) && data.existingSubmission.projects.length > 0) {
-              populateProjectCards(data.existingSubmission.projects);
-            }
-            btnSubmitStatus.innerHTML = `💾 Update Today's Tasks`;
-          } else {
-            editAlertBanner.classList.add('hidden');
-            btnSubmitStatus.innerHTML = `🚀 Submit Today's Tasks`;
+          if (data.todayStatus.attachments && Array.isArray(data.todayStatus.attachments)) {
+            attachedImages = [...data.todayStatus.attachments];
+            renderAttachmentPreviews();
+          }
+
+          if (data.todayStatus.projects && data.todayStatus.projects.length > 0) {
+            let bulkText = '';
+            data.todayStatus.projects.forEach(p => {
+              bulkText += `${p.name}\n`;
+              (p.tasks || []).forEach(t => {
+                const tText = typeof t === 'string' ? t : (t.text || '');
+                const tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
+                bulkText += `${tText} => ${tStatus}\n`;
+              });
+              bulkText += '\n';
+            });
+            bulkTasksInput.value = bulkText.trim();
+            populateProjectCards(data.todayStatus.projects);
           }
         }
       } catch (err) {
-        console.error('Error checking submission status:', err);
+        console.warn('Could not check prior submission status:', err);
       }
     }
 
@@ -873,7 +1065,8 @@ Upload new build => Done"></textarea>
           member: currentUser.name,
           rawText: rawText,
           note: note,
-          token: currentUser.token
+          token: currentUser.token,
+          attachments: attachedImages.map(img => ({ name: img.name, dataUrl: img.dataUrl }))
         };
       } else {
         const projectBlocks = document.querySelectorAll('.project-card-item');
@@ -896,7 +1089,8 @@ Upload new build => Done"></textarea>
           member: currentUser.name,
           projects: projects,
           note: note,
-          token: currentUser.token
+          token: currentUser.token,
+          attachments: attachedImages.map(img => ({ name: img.name, dataUrl: img.dataUrl }))
         };
       }
 
@@ -918,7 +1112,7 @@ Upload new build => Done"></textarea>
           submissionForm.classList.add('hidden');
           successSection.classList.remove('hidden');
           successHeaderTitle.textContent = `✓ Tasks Saved, ${currentUser.name}!`;
-          successSubDesc.textContent = `Your tasks have been compiled into today's 6:28 PM report in standard format. You can review or edit them anytime before 6:28 PM.`;
+          successSubDesc.textContent = `Your daily status update has been successfully recorded. Thank you for keeping the team updated!`;
         } else {
           alert('Submission Error: ' + data.error);
         }
