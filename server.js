@@ -1,7 +1,14 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const webpush = require('web-push');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getMessaging } = require('firebase-admin/messaging');
+
+const dbRepo = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3050;
@@ -28,23 +35,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
-const os = require('os');
-const webpush = require('web-push');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getMessaging } = require('firebase-admin/messaging');
-
-// On Vercel, the app root (/var/task) is read-only; use os.tmpdir() (/tmp)
-const isVercel = Boolean(process.env.VERCEL);
-const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'task_automation_data') : path.join(__dirname, 'data');
-const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const DRAFT_FILE = path.join(DATA_DIR, 'today_draft.json');
-const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions_log.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push_subscriptions.json');
-const VAPID_FILE = path.join(DATA_DIR, 'vapid_keys.json');
-const FIREBASE_CONFIG_FILE = path.join(DATA_DIR, 'firebase_config.json');
-const FIREBASE_SA_FILE = path.join(DATA_DIR, 'firebase_service_account.json');
+// Initialize database tables & default data
+dbRepo.initDatabaseTables().catch(err => {
+  console.error('Database initialization notice:', err.message);
+});
 
 // Initialize Firebase Admin SDK
 let firebaseApp = null;
@@ -53,20 +47,35 @@ let firebaseMessaging = null;
 try {
   let saData = null;
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      saData = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    } catch {
-      saData = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8'));
+    const rawVal = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+    if (rawVal.startsWith('{')) {
+      try {
+        saData = JSON.parse(rawVal);
+      } catch (e1) {
+        try {
+          saData = JSON.parse(rawVal.replace(/\\n/g, '\n'));
+        } catch (e2) { }
+      }
+    } else {
+      try {
+        saData = JSON.parse(Buffer.from(rawVal, 'base64').toString('utf8'));
+      } catch (e3) { }
     }
-  } else {
+  }
+
+  if (!saData || !saData.project_id) {
+    const isVercel = Boolean(process.env.VERCEL);
+    const dataDir = isVercel ? path.join(os.tmpdir(), 'task_automation_data') : path.join(__dirname, 'data');
     const saCandidates = [
-      FIREBASE_SA_FILE,
+      path.join(dataDir, 'firebase_service_account.json'),
       path.join(__dirname, 'data', 'firebase_service_account.json')
     ];
     for (const p of saCandidates) {
       if (fs.existsSync(p)) {
-        saData = JSON.parse(fs.readFileSync(p, 'utf8'));
-        break;
+        try {
+          saData = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (saData && saData.project_id) break;
+        } catch { }
       }
     }
   }
@@ -86,336 +95,24 @@ try {
 
 // Initialize VAPID Keys for Web Push Notifications
 let vapidKeys = { publicKey: '', privateKey: '' };
-try {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (fs.existsSync(VAPID_FILE)) {
-    vapidKeys = JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8') || '{}');
-  }
-  if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
-    vapidKeys = webpush.generateVAPIDKeys();
-    fs.writeFileSync(VAPID_FILE, JSON.stringify(vapidKeys, null, 2));
-  }
-  webpush.setVapidDetails(
-    'mailto:admin@taskautomation.local',
-    vapidKeys.publicKey,
-    vapidKeys.privateKey
-  );
-} catch (vapidErr) {
-  console.error('Error setting up VAPID keys:', vapidErr.message);
-}
-
-if (!fs.existsSync(PUSH_SUBS_FILE)) {
-  fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify([]));
-}
-
-function getPushSubscriptions() {
+(async () => {
   try {
-    if (fs.existsSync(PUSH_SUBS_FILE)) {
-      return JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf8') || '[]');
+    const keys = await dbRepo.getVapidKeys();
+    if (keys && keys.publicKey && keys.privateKey) {
+      vapidKeys = keys;
+    } else {
+      vapidKeys = webpush.generateVAPIDKeys();
+      await dbRepo.saveVapidKeys(vapidKeys);
     }
-  } catch (e) { }
-  return [];
-}
-
-function savePushSubscriptions(subs) {
-  try {
-    fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify(subs, null, 2));
-  } catch (e) {
-    console.error('Failed to save push subscriptions:', e.message);
+    webpush.setVapidDetails(
+      'mailto:admin@taskautomation.local',
+      vapidKeys.publicKey,
+      vapidKeys.privateKey
+    );
+  } catch (vapidErr) {
+    console.error('Error setting up VAPID keys:', vapidErr.message);
   }
-}
-
-// Helper: Format 24h time string (e.g. "18:15") to 12h display string (e.g. "6:15 PM")
-function formatTimeDisplay(timeStr) {
-  if (!timeStr) return '6:15 PM';
-  const [h, m] = timeStr.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const displayH = h % 12 || 12;
-  return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
-}
-
-// Helper: Get set of member names who have already submitted their status update today
-function getTodaySubmittedMembersSet() {
-  const submitted = new Set();
-  const today = getFormattedToday();
-
-  try {
-    if (fs.existsSync(DRAFT_FILE)) {
-      const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{}');
-      if (draft.date === today && Array.isArray(draft.teamData)) {
-        draft.teamData.forEach(m => {
-          if (m && m.name) {
-            const hasTasks = Array.isArray(m.projects) && m.projects.some(p => Array.isArray(p.tasks) && p.tasks.length > 0);
-            const hasNote = Boolean(m.note && m.note.trim());
-            if (hasTasks || hasNote) {
-              submitted.add(m.name.trim().toUpperCase());
-            }
-          }
-        });
-      }
-    }
-  } catch (e) {
-    console.error('Error reading draft for submitted members:', e.message);
-  }
-
-  try {
-    if (fs.existsSync(SUBMISSIONS_FILE)) {
-      const logs = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
-      logs.forEach(log => {
-        if (log.date === today && log.member) {
-          submitted.add(log.member.trim().toUpperCase());
-        }
-      });
-    }
-  } catch (e) {
-    console.error('Error reading submissions log:', e.message);
-  }
-
-  return submitted;
-}
-
-async function sendPushToEmployees(payload, options = {}) {
-  const subs = getPushSubscriptions();
-  const validSubs = [];
-  const fcmTokens = [];
-  let sentCount = 0;
-
-  const onlyPending = options.onlyPendingToday !== false;
-  const submittedSet = onlyPending ? getTodaySubmittedMembersSet() : new Set();
-
-  for (const sub of subs) {
-    if (sub.role === 'admin') {
-      validSubs.push(sub);
-      continue;
-    }
-
-    // If only pending members should receive reminders, skip users who already submitted today
-    if (onlyPending && sub.member) {
-      const normMember = sub.member.trim().toUpperCase();
-      if (submittedSet.has(normMember)) {
-        // User has already given their update today! Keep subscription valid, but skip reminder.
-        validSubs.push(sub);
-        continue;
-      }
-    }
-
-    // Firebase Cloud Messaging Token
-    if (sub.fcmToken) {
-      fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
-      continue;
-    }
-
-    // WebPush Subscription
-    if (sub.subscription && sub.subscription.endpoint) {
-      try {
-        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
-        validSubs.push(sub);
-        sentCount++;
-      } catch (err) {
-        if (err.statusCode === 404 || err.statusCode === 410) {
-          console.log(`Cleaned up expired push subscription for ${sub.member || 'employee'}`);
-        } else {
-          console.error('Push error to employee:', err.message);
-          validSubs.push(sub);
-        }
-      }
-    }
-  }
-
-  // Send to FCM devices
-  if (firebaseMessaging && fcmTokens.length > 0) {
-    const tokenStrings = fcmTokens.map(t => t.token);
-    try {
-      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
-        tokens: tokenStrings,
-        notification: {
-          title: payload.title || '⏰ Daily Status Task Reminder',
-          body: payload.body || 'Please submit your task report.'
-        },
-        data: {
-          url: payload.url || '/submit',
-          tag: payload.tag || 'employee-reminder'
-        },
-        webpush: {
-          fcmOptions: {
-            link: payload.url || '/submit'
-          }
-        }
-      });
-      sentCount += fcmResponse.successCount;
-      fcmResponse.responses.forEach((resp, idx) => {
-        if (resp.success) {
-          validSubs.push(fcmTokens[idx].subRecord);
-        } else {
-          const errCode = resp.error ? resp.error.code : '';
-          if (errCode === 'messaging/invalid-registration-token' ||
-              errCode === 'messaging/registration-token-not-registered') {
-            console.log(`Cleaned up invalid FCM token for ${fcmTokens[idx].subRecord.member || 'employee'}`);
-          } else {
-            validSubs.push(fcmTokens[idx].subRecord);
-          }
-        }
-      });
-    } catch (fcmErr) {
-      console.error('FCM Multicast error to employees:', fcmErr.message);
-      fcmTokens.forEach(t => validSubs.push(t.subRecord));
-    }
-  }
-
-  if (validSubs.length !== subs.length) {
-    savePushSubscriptions(validSubs);
-  }
-  return sentCount;
-}
-
-async function sendPushToAdmins(payload) {
-  const subs = getPushSubscriptions();
-  const validSubs = [];
-  const fcmTokens = [];
-  let sentCount = 0;
-
-  for (const sub of subs) {
-    if (sub.role !== 'admin') {
-      validSubs.push(sub);
-      continue;
-    }
-
-    // Firebase Cloud Messaging Token
-    if (sub.fcmToken) {
-      fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
-      continue;
-    }
-
-    // WebPush Subscription
-    if (sub.subscription && sub.subscription.endpoint) {
-      try {
-        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
-        validSubs.push(sub);
-        sentCount++;
-      } catch (err) {
-        if (err.statusCode === 404 || err.statusCode === 410) {
-          console.log(`Cleaned up expired push subscription for admin`);
-        } else {
-          console.error('Push error to admin:', err.message);
-          validSubs.push(sub);
-        }
-      }
-    }
-  }
-
-  // Send to FCM Admin devices
-  if (firebaseMessaging && fcmTokens.length > 0) {
-    const tokenStrings = fcmTokens.map(t => t.token);
-    try {
-      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
-        tokens: tokenStrings,
-        notification: {
-          title: payload.title || '🔔 Scrum Admin Alert',
-          body: payload.body || 'New task submission received.'
-        },
-        data: {
-          url: payload.url || '/',
-          tag: payload.tag || 'admin-alert'
-        },
-        webpush: {
-          fcmOptions: {
-            link: payload.url || '/'
-          }
-        }
-      });
-      sentCount += fcmResponse.successCount;
-      fcmResponse.responses.forEach((resp, idx) => {
-        if (resp.success) {
-          validSubs.push(fcmTokens[idx].subRecord);
-        } else {
-          const errCode = resp.error ? resp.error.code : '';
-          if (errCode === 'messaging/invalid-registration-token' ||
-              errCode === 'messaging/registration-token-not-registered') {
-            console.log(`Cleaned up invalid FCM token for admin`);
-          } else {
-            validSubs.push(fcmTokens[idx].subRecord);
-          }
-        }
-      });
-    } catch (fcmErr) {
-      console.error('FCM Multicast error to admins:', fcmErr.message);
-      fcmTokens.forEach(t => validSubs.push(t.subRecord));
-    }
-  }
-
-  if (validSubs.length !== subs.length) {
-    savePushSubscriptions(validSubs);
-  }
-  return sentCount;
-}
-
-const DEFAULT_USERS = [
-  { id: "u1", name: "HARSHAD", role: "", password: "Harsh#842" },
-  { id: "u2", name: "KIRAN", role: "", password: "Kiran#519" },
-  { id: "u3", name: "DHRUV", role: "", password: "Dhruv#638" },
-  { id: "u4", name: "PRANAV", role: "", password: "Pran#247" },
-  { id: "u5", name: "KARTIK", role: "", password: "Kart#816" },
-  { id: "u6", name: "DEVERSH", role: "Nodejs Developer", password: "Deve#379" },
-  { id: "u7", name: "RADHEY", role: "Nodejs Developer", password: "Radh#592" },
-  { id: "u8", name: "AJAY", role: "Designer", password: "Ajay#481" },
-  { id: "u9", name: "HASTI", role: "Designer", password: "Hast#726" },
-  { id: "u10", name: "NISARG", role: "QA & Scrum Master", password: "nisarg@2002" }
-];
-
-const MASTER_ROSTER_ORDER = [
-  'HARSHAD',
-  'KIRAN',
-  'DHRUV',
-  'PRANAV',
-  'KARTIK',
-  'DEVERSH',
-  'RADHEY',
-  'AJAY',
-  'HASTI',
-  'NISARG'
-];
-
-function sortTeamDataByRoster(teamData) {
-  if (!Array.isArray(teamData)) return [];
-  return [...teamData].sort((a, b) => {
-    const nameA = (a.name || a.member || '').toUpperCase().trim();
-    const nameB = (b.name || b.member || '').toUpperCase().trim();
-    let idxA = MASTER_ROSTER_ORDER.indexOf(nameA);
-    let idxB = MASTER_ROSTER_ORDER.indexOf(nameB);
-    if (idxA === -1) idxA = 999;
-    if (idxB === -1) idxB = 999;
-    return idxA - idxB;
-  });
-}
-
-// Token Helpers (Permanent Non-Expiring Session Tokens)
-function generateUserToken(user) {
-  const payload = {
-    id: user.id,
-    name: user.name,
-    role: user.role || '',
-    sig: 'scrum_auth_v1'
-  };
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
-}
-
-function verifyUserToken(tokenStr) {
-  if (!tokenStr) return null;
-  try {
-    const raw = Buffer.from(tokenStr, 'base64url').toString('utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.name && parsed.sig === 'scrum_auth_v1') {
-      const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
-      const match = users.find(u => u.name.toUpperCase() === parsed.name.toUpperCase());
-      return match || { name: parsed.name, role: parsed.role || '' };
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
+})();
 
 // Helper: Format Date DD/MM/YYYY in Asia/Kolkata / Local timezone
 function getFormattedToday(dateObj = new Date()) {
@@ -450,10 +147,19 @@ function getIsoDate(dateObj = new Date()) {
   }
 }
 
+// Helper: Format 24h time string (e.g. "18:15") to 12h display string (e.g. "6:15 PM")
+function formatTimeDisplay(timeStr) {
+  if (!timeStr) return '6:15 PM';
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 // Helper: Check if current time in Asia/Kolkata is after cutoff time (6:28 PM)
-function isAfterCutoffTime() {
+async function isAfterCutoffTime() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     const cutoff = config.reminderTime || '18:28';
     const [cutoffH, cutoffM] = cutoff.split(':').map(Number);
 
@@ -477,72 +183,335 @@ function isAfterCutoffTime() {
   }
 }
 
-// Ensure data directory exists and seed initial files
-try {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+// Helper: Check if current time in Asia/Kolkata is after auto-leave cutoff time (6:25 PM) on a working day
+async function isAfterAutoLeaveTime() {
+  try {
+    const config = await dbRepo.getConfig();
+    const autoLeave = config.autoLeaveTime || '18:25';
+    const [leaveH, leaveM] = autoLeave.split(':').map(Number);
 
-  // If on Vercel, copy initial config/draft/submissions/users from package if exists
-  const localDataDir = path.join(__dirname, 'data');
-  if (isVercel && fs.existsSync(localDataDir)) {
-    try {
-      if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(path.join(localDataDir, 'config.json'))) {
-        fs.copyFileSync(path.join(localDataDir, 'config.json'), CONFIG_FILE);
-      }
-      if (!fs.existsSync(DRAFT_FILE) && fs.existsSync(path.join(localDataDir, 'today_draft.json'))) {
-        fs.copyFileSync(path.join(localDataDir, 'today_draft.json'), DRAFT_FILE);
-      }
-      if (!fs.existsSync(SUBMISSIONS_FILE) && fs.existsSync(path.join(localDataDir, 'submissions_log.json'))) {
-        fs.copyFileSync(path.join(localDataDir, 'submissions_log.json'), SUBMISSIONS_FILE);
-      }
-      if (!fs.existsSync(USERS_FILE) && fs.existsSync(path.join(localDataDir, 'users.json'))) {
-        fs.copyFileSync(path.join(localDataDir, 'users.json'), USERS_FILE);
-      }
-    } catch (e) { }
-  }
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
 
-  if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(DEFAULT_USERS, null, 2));
+    const weekdayStr = parts.find(p => p.type === 'weekday')?.value || '';
+    const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
+    if (!isWorkingDay) return false;
+
+    const curH = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const curM = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+
+    const currentTotalMin = curH * 60 + curM;
+    const leaveTotalMin = leaveH * 60 + leaveM;
+
+    return currentTotalMin >= leaveTotalMin;
+  } catch (e) {
+    return false;
   }
-  if (!fs.existsSync(HISTORY_FILE)) {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
-  }
-  if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify({
-      webhookUrl: '',
-      reminderTime: '18:28',
-      autoDispatch: true
-    }));
-  }
-  if (!fs.existsSync(DRAFT_FILE)) {
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify({ date: '', teamData: [] }));
-  }
-  if (!fs.existsSync(SUBMISSIONS_FILE)) {
-    // Seed with existing draft if available
-    let initialSubmissions = [];
-    if (fs.existsSync(DRAFT_FILE)) {
-      try {
-        const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{}');
-        const draftDate = draft.date || getFormattedToday();
-        if (Array.isArray(draft.teamData)) {
-          initialSubmissions = draft.teamData.map((m, idx) => ({
-            id: `seed-${Date.now()}-${idx}`,
-            member: m.name,
-            role: m.role || '',
-            note: m.note || '',
-            projects: m.projects || [],
-            date: draftDate,
-            isoDate: getIsoDate(),
-            timestamp: new Date().toISOString()
-          }));
-        }
-      } catch (e) { }
+}
+
+// Helper: Auto-mark pending employees who have not sent an update today as ON LEAVE
+async function autoMarkPendingEmployeesLeave(targetDate = getFormattedToday()) {
+  try {
+    const draft = await dbRepo.getDailyDraft(targetDate);
+    draft.date = targetDate;
+    if (!Array.isArray(draft.teamData)) {
+      draft.teamData = [];
     }
-    fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(initialSubmissions, null, 2));
+
+    const allUsers = await dbRepo.getUsers();
+    let modified = false;
+    const nowIso = new Date().toISOString();
+
+    allUsers.forEach(user => {
+      const userNameUpper = (user.name || '').toUpperCase().trim();
+      if (!userNameUpper) return;
+
+      const existingIndex = draft.teamData.findIndex(
+        m => m && m.name && m.name.toUpperCase().trim() === userNameUpper
+      );
+
+      const existingMember = existingIndex >= 0 ? draft.teamData[existingIndex] : null;
+      const hasTasks = existingMember && Array.isArray(existingMember.projects) && existingMember.projects.some(p => Array.isArray(p.tasks) && p.tasks.length > 0);
+      const hasNote = existingMember && Boolean(existingMember.note && existingMember.note.trim());
+
+      // If member already has tasks or note, do not overwrite
+      if (hasTasks || hasNote) {
+        return;
+      }
+
+      // Member hasn't sent an update today: mark ON LEAVE
+      const leaveEntry = {
+        name: userNameUpper,
+        role: (existingMember && existingMember.role) || user.role || '',
+        note: 'ON LEAVE',
+        projects: [],
+        attachments: [],
+        updatedAt: nowIso
+      };
+
+      if (existingIndex >= 0) {
+        draft.teamData[existingIndex] = leaveEntry;
+      } else {
+        draft.teamData.push(leaveEntry);
+      }
+      modified = true;
+    });
+
+    if (modified) {
+      const sortedTeamData = dbRepo.sortTeamDataByRoster(draft.teamData);
+      const newVersion = (draft.version || 0) + 1;
+      await dbRepo.saveDailyDraft(targetDate, sortedTeamData, newVersion, nowIso);
+      console.log(`📝 [Auto-Leave] Marked pending employees as ON LEAVE for ${targetDate}`);
+      return { updated: true, teamData: sortedTeamData };
+    }
+    return { updated: false, teamData: draft.teamData };
+  } catch (err) {
+    console.error('Error auto-marking pending employees as ON LEAVE:', err.message);
+    return { updated: false, error: err.message };
   }
-} catch (err) {
-  console.error('Error initializing data directory:', err.message);
+}
+
+// Helper: Get set of member names who have already submitted their status update today
+async function getTodaySubmittedMembersSet() {
+  const submitted = new Set();
+  const today = getFormattedToday();
+
+  try {
+    const draft = await dbRepo.getDailyDraft(today);
+    if (draft && draft.date === today && Array.isArray(draft.teamData)) {
+      draft.teamData.forEach(m => {
+        if (m && m.name) {
+          const hasTasks = Array.isArray(m.projects) && m.projects.some(p => Array.isArray(p.tasks) && p.tasks.length > 0);
+          const hasNote = Boolean(m.note && m.note.trim());
+          if (hasTasks || hasNote) {
+            submitted.add(m.name.trim().toUpperCase());
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Error reading draft for submitted members:', e.message);
+  }
+
+  try {
+    const logs = await dbRepo.getSubmissions({ period: 'daily' });
+    logs.forEach(log => {
+      if (log.member) {
+        submitted.add(log.member.trim().toUpperCase());
+      }
+    });
+  } catch (e) {
+    console.error('Error reading submissions log:', e.message);
+  }
+
+  return submitted;
+}
+
+// Push notification sender to employees
+async function sendPushToEmployees(payload, options = {}) {
+  const subs = await dbRepo.getPushSubscriptions();
+  const validSubs = [];
+  const fcmTokens = [];
+  const seenEndpoints = new Set();
+  const seenFcmTokens = new Set();
+  let sentCount = 0;
+
+  const targetMember = options.targetMember ? options.targetMember.toUpperCase().trim() : '';
+
+  for (const sub of subs) {
+    if (sub.role === 'admin') {
+      validSubs.push(sub);
+      continue;
+    }
+
+    // If specific targetMember is given, filter by that member
+    if (targetMember && sub.member && sub.member.toUpperCase().trim() !== targetMember) {
+      validSubs.push(sub);
+      continue;
+    }
+
+    if (sub.fcmToken) {
+      if (!seenFcmTokens.has(sub.fcmToken)) {
+        seenFcmTokens.add(sub.fcmToken);
+        fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
+      }
+      continue;
+    }
+
+    if (sub.subscription && sub.subscription.endpoint) {
+      if (seenEndpoints.has(sub.subscription.endpoint)) {
+        continue;
+      }
+      seenEndpoints.add(sub.subscription.endpoint);
+
+      try {
+        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
+        validSubs.push(sub);
+        sentCount++;
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          console.log(`Cleaned up expired push subscription for ${sub.member || 'employee'}`);
+          await dbRepo.removePushSubscription(sub.subscription.endpoint, null);
+        } else {
+          console.error(`Push error to ${sub.member || 'employee'}:`, err.message);
+          validSubs.push(sub);
+        }
+      }
+    }
+  }
+
+  // Send to FCM devices
+  if (firebaseMessaging && fcmTokens.length > 0) {
+    const tokenStrings = fcmTokens.map(t => t.token);
+    try {
+      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
+        tokens: tokenStrings,
+        notification: {
+          title: payload.title || '⏰ Daily Status Task Reminder',
+          body: payload.body || 'Please submit your task report.'
+        },
+        data: {
+          url: payload.url || '/submit',
+          tag: payload.tag || 'employee-reminder'
+        },
+        webpush: {
+          fcmOptions: {
+            link: payload.url || '/submit'
+          }
+        }
+      });
+      sentCount += fcmResponse.successCount;
+      for (let idx = 0; idx < fcmResponse.responses.length; idx++) {
+        const resp = fcmResponse.responses[idx];
+        if (resp.success) {
+          validSubs.push(fcmTokens[idx].subRecord);
+        } else {
+          const errCode = resp.error ? resp.error.code : '';
+          if (errCode === 'messaging/invalid-registration-token' ||
+              errCode === 'messaging/registration-token-not-registered') {
+            console.log(`Cleaned up invalid FCM token for ${fcmTokens[idx].subRecord.member || 'employee'}`);
+            await dbRepo.removePushSubscription(null, fcmTokens[idx].token);
+          } else {
+            validSubs.push(fcmTokens[idx].subRecord);
+          }
+        }
+      }
+    } catch (fcmErr) {
+      console.error('FCM Multicast error to employees:', fcmErr.message);
+    }
+  }
+
+  return sentCount;
+}
+
+// Push notification sender to admin
+async function sendPushToAdmins(payload) {
+  const subs = await dbRepo.getPushSubscriptions();
+  const validSubs = [];
+  const fcmTokens = [];
+  let sentCount = 0;
+
+  for (const sub of subs) {
+    if (sub.role !== 'admin') {
+      validSubs.push(sub);
+      continue;
+    }
+
+    if (sub.fcmToken) {
+      fcmTokens.push({ token: sub.fcmToken, subRecord: sub });
+      continue;
+    }
+
+    if (sub.subscription && sub.subscription.endpoint) {
+      try {
+        await webpush.sendNotification(sub.subscription, JSON.stringify(payload));
+        validSubs.push(sub);
+        sentCount++;
+      } catch (err) {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          console.log(`Cleaned up expired push subscription for admin`);
+          await dbRepo.removePushSubscription(sub.subscription.endpoint, null);
+        } else {
+          console.error('Push error to admin:', err.message);
+          validSubs.push(sub);
+        }
+      }
+    }
+  }
+
+  if (firebaseMessaging && fcmTokens.length > 0) {
+    const tokenStrings = fcmTokens.map(t => t.token);
+    try {
+      const fcmResponse = await firebaseMessaging.sendEachForMulticast({
+        tokens: tokenStrings,
+        notification: {
+          title: payload.title || '🔔 Scrum Admin Alert',
+          body: payload.body || 'New task submission received.'
+        },
+        data: {
+          url: payload.url || '/',
+          tag: payload.tag || 'admin-alert'
+        },
+        webpush: {
+          fcmOptions: {
+            link: payload.url || '/'
+          }
+        }
+      });
+      sentCount += fcmResponse.successCount;
+      for (let idx = 0; idx < fcmResponse.responses.length; idx++) {
+        const resp = fcmResponse.responses[idx];
+        if (resp.success) {
+          validSubs.push(fcmTokens[idx].subRecord);
+        } else {
+          const errCode = resp.error ? resp.error.code : '';
+          if (errCode === 'messaging/invalid-registration-token' ||
+              errCode === 'messaging/registration-token-not-registered') {
+            console.log(`Cleaned up invalid FCM token for admin`);
+            await dbRepo.removePushSubscription(null, fcmTokens[idx].token);
+          } else {
+            validSubs.push(fcmTokens[idx].subRecord);
+          }
+        }
+      }
+    } catch (fcmErr) {
+      console.error('FCM Multicast error to admins:', fcmErr.message);
+    }
+  }
+
+  return sentCount;
+}
+
+// Token Helpers (Permanent Session Tokens)
+function generateUserToken(user) {
+  const payload = {
+    id: user.id,
+    name: user.name,
+    role: user.role || '',
+    sig: 'scrum_auth_v1'
+  };
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+}
+
+async function verifyUserToken(tokenStr) {
+  if (!tokenStr) return null;
+  try {
+    const raw = Buffer.from(tokenStr, 'base64url').toString('utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.name && parsed.sig === 'scrum_auth_v1') {
+      const match = await dbRepo.getUserByName(parsed.name);
+      return match || { name: parsed.name, role: parsed.role || '' };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 function getLocalIp() {
@@ -567,6 +536,7 @@ app.get('/api/info', (req, res) => {
   const localIp = getLocalIp();
   res.json({
     localIp,
+    isNeonDb: dbRepo.isDbConnected(),
     submitUrl: `http://${localIp}:${PORT}/submit`,
     adminUrl: `http://localhost:${PORT}`
   });
@@ -607,16 +577,14 @@ app.post('/api/send-chat', async (req, res) => {
 
     const responseData = await response.json();
 
-    // Auto save to history
-    const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8') || '[]');
+    // Auto save to history database
     const newEntry = {
       id: Date.now().toString(),
       timestamp: new Date().toISOString(),
       formattedText: text,
       status: 'Sent to Google Chat'
     };
-    history.unshift(newEntry);
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2));
+    await dbRepo.addHistory(newEntry);
 
     return res.json({
       success: true,
@@ -635,23 +603,17 @@ app.post('/api/send-chat', async (req, res) => {
 // -----------------------------------------------------------------------------
 // Authentication & User Management APIs
 // -----------------------------------------------------------------------------
-app.post('/api/auth/admin-login', (req, res) => {
+app.post('/api/auth/admin-login', async (req, res) => {
   try {
     const { password } = req.body;
     if (!password) {
       return res.status(401).json({ success: false, error: 'Password is required.' });
     }
     const inputPass = String(password).trim();
-    let config = {};
-    try {
-      config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
-    } catch { }
-    let users = [];
-    try {
-      users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
-    } catch { }
+    const config = await dbRepo.getConfig();
+    const users = await dbRepo.getUsers();
     const nisargUser = users.find(u => u.name && u.name.toUpperCase() === 'NISARG');
-    
+
     const validPasswords = new Set([
       'nisarg@2002',
       'admin123',
@@ -669,16 +631,14 @@ app.post('/api/auth/admin-login', (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { member, password } = req.body;
     if (!member || !password) {
       return res.status(400).json({ success: false, error: 'Member name and password are required.' });
     }
 
-    const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
-    const user = users.find(u => u.name.toUpperCase() === member.toUpperCase().trim());
-
+    const user = await dbRepo.getUserByName(member);
     if (!user) {
       return res.status(401).json({ success: false, error: 'Employee name not found in team roster.' });
     }
@@ -702,11 +662,11 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token;
-    const user = verifyUserToken(token);
+    const user = await verifyUserToken(token);
 
     if (!user) {
       return res.status(401).json({ success: false, error: 'Session expired or invalid.' });
@@ -718,44 +678,45 @@ app.get('/api/auth/me', (req, res) => {
   }
 });
 
-app.get('/api/users', (req, res) => {
+app.get('/api/users', async (req, res) => {
   try {
-    const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
+    const users = await dbRepo.getUsers();
     res.json({ success: true, users });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/users/update', (req, res) => {
+app.post('/api/users/update', async (req, res) => {
   try {
     const { users } = req.body;
     if (!Array.isArray(users)) {
       return res.status(400).json({ success: false, error: 'Invalid users array.' });
     }
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    await dbRepo.saveUsers(users);
     res.json({ success: true, message: 'User credentials updated successfully.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Check submission status, user draft, and 6:28 PM lock state
-app.get('/api/submission-status', (req, res) => {
+// Check submission status, user draft, and lock state
+app.get('/api/submission-status', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token;
-    const authUser = verifyUserToken(token);
+    const authUser = await verifyUserToken(token);
     const memberName = (req.query.member || (authUser ? authUser.name : '')).toUpperCase().trim();
 
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     const cutoffTime = config.reminderTime || '18:28';
-    const locked = isAfterCutoffTime();
+    const locked = await isAfterCutoffTime();
 
     let existingSubmission = null;
     if (memberName) {
-      const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
-      const found = (draft.teamData || []).find(m => m.name.toUpperCase() === memberName);
+      const todayDate = getFormattedToday();
+      const draft = await dbRepo.getDailyDraft(todayDate);
+      const found = (draft.teamData || []).find(m => m.name && m.name.toUpperCase() === memberName);
       if (found) {
         let rawText = '';
         (found.projects || []).forEach(p => {
@@ -787,8 +748,8 @@ app.get('/api/submission-status', (req, res) => {
   }
 });
 
-// Member Direct Submission API from /submit (Supports Single & Multi-Projects with Auth Lock & 6:28 PM Cutoff)
-app.post('/api/submit-task', (req, res) => {
+// Member Direct Submission API from /submit
+app.post('/api/submit-task', async (req, res) => {
   try {
     const { member, project, tasks, projects, note, password, token, rawText, attachments } = req.body;
     if (!member) {
@@ -796,8 +757,8 @@ app.post('/api/submit-task', (req, res) => {
     }
 
     // Cutoff Enforcement: Submissions/Edits close at cutoff time
-    if (isAfterCutoffTime()) {
-      const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    if (await isAfterCutoffTime()) {
+      const config = await dbRepo.getConfig();
       const cutoffStr = formatTimeDisplay(config.reminderTime || '18:15');
       return res.status(403).json({
         success: false,
@@ -809,11 +770,10 @@ app.post('/api/submit-task', (req, res) => {
     // Auth Validation: Verify user token or password
     const authHeader = req.headers.authorization || '';
     const authToken = authHeader.replace(/^Bearer\s+/i, '') || token;
-    let authUser = verifyUserToken(authToken);
+    let authUser = await verifyUserToken(authToken);
 
     if (!authUser && password) {
-      const users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8') || '[]');
-      const userMatch = users.find(u => u.name.toUpperCase() === member.toUpperCase());
+      const userMatch = await dbRepo.getUserByName(member);
       if (userMatch && userMatch.password === password.trim()) {
         authUser = userMatch;
       }
@@ -829,100 +789,65 @@ app.post('/api/submit-task', (req, res) => {
 
     const todayDate = getFormattedToday();
     const todayIso = getIsoDate();
-    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+    const draft = await dbRepo.getDailyDraft(todayDate);
     draft.date = todayDate;
 
     function parseRawMemberInput(rawText, defaultProjectName = 'General Tasks') {
       if (!rawText || !rawText.trim()) return [];
 
       const trimmed = rawText.trim();
-      const blocks = trimmed.split(/\n\s*\n+/);
+      const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (rawLines.length === 0) return [];
+
       const projList = [];
+      let currentProject = null;
 
-      if (blocks.length > 1) {
-        for (const block of blocks) {
-          const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-          if (lines.length === 0) continue;
+      function isTaskLine(line) {
+        if (/[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
+        if (/\b(DONE|WIP)\b/i.test(line)) return true;
+        if (/^[-•*#\d\.\)\s]+/.test(line) && /^[-•*#\d\.\)]+\s*[a-zA-Z]/.test(line)) return true;
+        return false;
+      }
 
-          let projName = defaultProjectName;
-          let taskLines = lines;
+      function cleanTaskLine(line) {
+        let clean = line.replace(/^[-•*#]+\s*/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+        let status = 'Done';
 
-          const firstLine = lines[0];
-          const isFirstLineBullet = /^[-•*]\s+/.test(firstLine) || /^\d+[\.\)]\s+/.test(firstLine);
-          const isFirstLineExplicitHeader = /[:-]+$/.test(firstLine);
-          const hasStatusInFirstLine = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(firstLine) || /\b(DONE|WIP)\b/i.test(firstLine);
-
-          if ((isFirstLineExplicitHeader || (!isFirstLineBullet && !hasStatusInFirstLine && firstLine.length < 80)) && lines.length > 1) {
-            projName = firstLine.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim() || defaultProjectName;
-            taskLines = lines.slice(1);
-          } else if (isFirstLineExplicitHeader && lines.length === 1) {
-            projName = firstLine.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim() || defaultProjectName;
-            taskLines = [];
-          }
-
-          const tasks = [];
-          for (const line of taskLines) {
-            let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
-            let status = 'Done';
-
-            if (/[-—–=>:]+\s*(wip|in\s*progress|working)/i.test(clean) || /\bWIP\b/i.test(clean)) {
-              status = 'WIP';
-              clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working)/i, '').replace(/\bWIP\b/i, '').trim();
-            } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
-              status = 'Done';
-              clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
-            }
-
-            clean = clean.replace(/[-—–=>:]+$/, '').trim();
-            if (clean) {
-              tasks.push({ text: clean, status });
-            }
-          }
-
-          if (tasks.length > 0) {
-            projList.push({ name: projName, tasks });
-          }
+        if (/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i.test(clean) || /\bWIP\b\s*$/i.test(clean)) {
+          status = 'WIP';
+          clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i, '').replace(/\bWIP\b\s*$/i, '').trim();
+        } else if (/[-—–=>:]+\s*(done|completed|complete)\s*$/i.test(clean) || /\b(DONE|Done)\b\s*$/i.test(clean)) {
+          status = 'Done';
+          clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)\s*$/i, '').replace(/\b(DONE|Done)\b\s*$/i, '').trim();
         }
-      } else {
-        const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        let curProj = null;
 
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          const isBullet = /^[-•*]\s+/.test(line) || /^\d+[\.\)]\s+/.test(line);
-          const isExplicitHeader = /[:-]+$/.test(line);
-          const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
+        clean = clean.replace(/[-—–=>:]+$/, '').trim();
+        return { text: clean, status };
+      }
 
-          const isProjectHeader = isExplicitHeader || (i === 0 && !hasStatus && !isBullet && lines.length > 1 && line.length < 80);
+      function cleanProjectName(line) {
+        return line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').replace(/\s*General Tasks\s*$/i, '').trim();
+      }
 
-          if (isProjectHeader) {
-            let cleanProjName = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
-            curProj = {
-              name: cleanProjName || defaultProjectName,
-              tasks: []
-            };
-            projList.push(curProj);
-          } else {
-            if (!curProj) {
-              curProj = { name: defaultProjectName, tasks: [] };
-              projList.push(curProj);
-            }
+      for (let i = 0; i < rawLines.length; i++) {
+        const line = rawLines[i];
+        const isExplicitHeader = /[:-]+$/.test(line) && !isTaskLine(line);
+        const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
 
-            let clean = line.replace(/^[-•*]\s+/, '').replace(/^\d+[\.\)]\s+/, '').trim();
-            let status = 'Done';
+        const isProjHeader = isExplicitHeader || (!hasStatus && !/^[-•*]\s*[a-zA-Z0-9]/.test(line) && line.length < 80 && (i === 0 || !isTaskLine(line)));
 
-            if (/[-—–=>:]+\s*(wip|in\s*progress|working)/i.test(clean) || /\bWIP\b/i.test(clean)) {
-              status = 'WIP';
-              clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working)/i, '').replace(/\bWIP\b/i, '').trim();
-            } else if (/[-—–=>:]+\s*(done|completed|complete)/i.test(clean) || /\bDONE\b/i.test(clean) || /\bDone\b/.test(clean)) {
-              status = 'Done';
-              clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)/i, '').replace(/\bDONE\b/i, '').trim();
-            }
-
-            clean = clean.replace(/[-—–=>:]+$/, '').trim();
-            if (clean) {
-              curProj.tasks.push({ text: clean, status });
-            }
+        if (isProjHeader) {
+          const pName = cleanProjectName(line) || defaultProjectName;
+          currentProject = { name: pName, tasks: [] };
+          projList.push(currentProject);
+        } else {
+          if (!currentProject) {
+            currentProject = { name: defaultProjectName, tasks: [] };
+            projList.push(currentProject);
+          }
+          const parsed = cleanTaskLine(line);
+          if (parsed.text) {
+            currentProject.tasks.push(parsed);
           }
         }
       }
@@ -930,26 +855,46 @@ app.post('/api/submit-task', (req, res) => {
       return projList.filter(p => p.tasks && p.tasks.length > 0);
     }
 
+    function getDefaultProjectForMember(memberName) {
+      const norm = (memberName || '').toUpperCase().trim();
+      if (norm.includes('HARSHAD')) return 'RankMyTrip';
+      if (norm.includes('KIRAN')) return 'FirstText App';
+      if (norm.includes('DHRUV')) return 'Crystal Wish app';
+      if (norm.includes('PRANAV')) return "Happy Reward's Dashboard Application";
+      if (norm.includes('KARTIK')) return 'Happy Reward Shopify';
+      if (norm.includes('DEVERSH')) return 'SEC EDGAR Terminal';
+      if (norm.includes('RADHEY')) return 'AI-powered SEO/marketing platform';
+      if (norm.includes('AJAY')) return 'Alarm App';
+      if (norm.includes('HASTI')) return 'AI Life Mentor';
+      if (norm.includes('NISARG')) return 'QA & Testing';
+      return 'General Tasks';
+    }
+
+    const memberDefaultProject = getDefaultProjectForMember(member);
+
     let parsedProjects = [];
 
-    if (req.body.rawText) {
-      parsedProjects = parseRawMemberInput(req.body.rawText, project || 'General Tasks');
+    if (rawText) {
+      parsedProjects = parseRawMemberInput(rawText, project || memberDefaultProject);
     } else if (Array.isArray(projects) && projects.length > 0) {
-      parsedProjects = projects.map(p => ({
-        name: p.name ? p.name.trim() : 'General Tasks',
-        tasks: typeof p.tasks === 'string' 
-          ? parseRawMemberInput(p.tasks, p.name || 'General Tasks')[0]?.tasks || []
-          : (p.tasks || [])
-      })).filter(p => p.tasks && p.tasks.length > 0);
+      parsedProjects = projects.map(p => {
+        const pName = (p.name && p.name.trim()) ? p.name.trim() : memberDefaultProject;
+        return {
+          name: pName,
+          tasks: typeof p.tasks === 'string' 
+            ? parseRawMemberInput(p.tasks, pName)[0]?.tasks || []
+            : (p.tasks || [])
+        };
+      }).filter(p => p.tasks && p.tasks.length > 0);
     } else if (tasks) {
-      parsedProjects = parseRawMemberInput(tasks, project || 'General Tasks');
+      parsedProjects = parseRawMemberInput(tasks, project || memberDefaultProject);
     }
 
     if (parsedProjects.length === 0) {
       return res.status(400).json({ success: false, error: 'At least one project with tasks is required.' });
     }
 
-    const memberName = member.toUpperCase();
+    const memberName = member.toUpperCase().trim();
     let memberRole = '';
     if (memberName.includes('DEVERSH') || memberName.includes('RADHEY')) memberRole = 'Nodejs Developer';
     else if (memberName.includes('AJAY') || memberName.includes('HASTI')) memberRole = 'Designer';
@@ -966,101 +911,93 @@ app.post('/api/submit-task', (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    // Replace or append
-    const existingIndex = draft.teamData.findIndex(m => m.name.toUpperCase() === memberName);
+    // Replace or append to daily draft
+    const existingIndex = (draft.teamData || []).findIndex(m => m.name && m.name.toUpperCase() === memberName);
     if (existingIndex >= 0) {
       draft.teamData[existingIndex] = newMemberEntry;
     } else {
+      if (!Array.isArray(draft.teamData)) draft.teamData = [];
       draft.teamData.push(newMemberEntry);
     }
 
-    draft.teamData = sortTeamDataByRoster(draft.teamData);
-    draft.version = (draft.version || 0) + 1;
-    draft.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify(draft, null, 2));
+    const sortedTeamData = dbRepo.sortTeamDataByRoster(draft.teamData);
+    const newVersion = (draft.version || 0) + 1;
+    const nowIso = new Date().toISOString();
 
-    // Log to SUBMISSIONS_FILE for historical filtering (Daily/Weekly/Monthly)
-    try {
-      let submissions = [];
-      if (fs.existsSync(SUBMISSIONS_FILE)) {
-        submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
-      }
-      const existingSubIndex = submissions.findIndex(s =>
-        s.member && s.member.toUpperCase() === memberName && (s.date === todayDate || s.isoDate === todayIso)
-      );
+    const savedDraft = await dbRepo.saveDailyDraft(todayDate, sortedTeamData, newVersion, nowIso);
 
-      const submissionRecord = {
-        id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        member: memberName,
-        role: memberRole,
-        note: note || '',
-        projects: parsedProjects,
-        attachments: validAttachments,
-        date: todayDate,
-        isoDate: todayIso,
-        timestamp: new Date().toISOString()
-      };
-
-      if (existingSubIndex >= 0) {
-        submissions[existingSubIndex] = submissionRecord;
-      } else {
-        submissions.unshift(submissionRecord);
-      }
-      fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions.slice(0, 1000), null, 2));
-    } catch (subErr) {
-      console.error('Error recording submission log:', subErr.message);
-    }
+    // Save permanently in database submissions table
+    const submissionRecord = {
+      id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      member: memberName,
+      role: memberRole,
+      note: note || '',
+      projects: parsedProjects,
+      attachments: validAttachments,
+      date: todayDate,
+      isoDate: todayIso,
+      timestamp: nowIso
+    };
+    await dbRepo.addOrUpdateSubmission(submissionRecord);
 
     // Instantly notify Admin via Web Push
     try {
       sendPushToAdmins({
         title: `📋 ${member} Updated Tasks`,
         body: `${member} just updated/submitted their daily task report (${parsedProjects.length} project(s)).`,
-        url: '/',
-        tag: `task-submit-${memberName}`
+        url: `/?updatedMember=${encodeURIComponent(memberName)}&notification=task_update`,
+        tag: `task-submit-${memberName}`,
+        data: {
+          memberName: memberName,
+          notificationType: 'task_update',
+          projectsCount: String(parsedProjects.length),
+          timestamp: nowIso
+        }
       }).catch(err => console.error('Admin push notification error:', err.message));
     } catch (pushErr) {
       console.error('Error dispatching admin push:', pushErr.message);
     }
 
-    res.json({ success: true, message: `Tasks for ${member} across ${parsedProjects.length} project(s) recorded!`, draft, version: draft.version, lastUpdated: draft.lastUpdated });
+    res.json({
+      success: true,
+      message: `Tasks for ${member} across ${parsedProjects.length} project(s) recorded!`,
+      draft: savedDraft,
+      version: savedDraft.version,
+      lastUpdated: savedDraft.lastUpdated
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // Draft Management
-app.get('/api/draft', (req, res) => {
+app.get('/api/draft', async (req, res) => {
   try {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[],"version":0}');
-    if (Array.isArray(draft.teamData)) {
-      draft.teamData = sortTeamDataByRoster(draft.teamData);
+    const today = getFormattedToday();
+    const targetDate = req.query.date || today;
+    if (targetDate === today && await isAfterAutoLeaveTime()) {
+      await autoMarkPendingEmployeesLeave(today);
     }
-    res.json({ success: true, draft, version: draft.version || 0, lastUpdated: draft.lastUpdated || '' });
+    const draft = await dbRepo.getDailyDraft(targetDate);
+    res.json({
+      success: true,
+      draft,
+      version: draft.version || 0,
+      lastUpdated: draft.lastUpdated || ''
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/draft', (req, res) => {
+app.post('/api/draft', async (req, res) => {
   try {
     const { date, teamData, baseVersion, clientTimestamp, forceOverwrite, deletedMemberNames } = req.body;
     const targetDate = date || getFormattedToday();
     const incomingTeamData = Array.isArray(teamData) ? teamData : [];
     const deletedSet = new Set((Array.isArray(deletedMemberNames) ? deletedMemberNames : []).map(n => String(n).toUpperCase().trim()));
 
-    let serverDraft = { date: targetDate, teamData: [], version: 0 };
-    try {
-      if (fs.existsSync(DRAFT_FILE)) {
-        serverDraft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[],"version":0}');
-      }
-    } catch (e) { }
-
-    // If date changed to a new day, reset server draft
-    if (serverDraft.date && serverDraft.date !== targetDate) {
-      serverDraft = { date: targetDate, teamData: [], version: 0 };
-    }
+    let serverDraft = await dbRepo.getDailyDraft(targetDate);
 
     const serverMembersMap = new Map();
     if (Array.isArray(serverDraft.teamData)) {
@@ -1079,22 +1016,20 @@ app.post('/api/draft', (req, res) => {
     // 1. Preserve all existing server members unless explicitly deleted by Admin
     for (const [name, sMember] of serverMembersMap.entries()) {
       if (deletedSet.has(name)) {
-        continue; // Explicitly deleted by Admin
+        continue;
       }
 
       const cMember = incomingMembersMap.get(name);
       if (!cMember) {
-        // Missing in incoming client snapshot: PRESERVE server member submission!
+        // Missing in incoming snapshot: PRESERVE server member submission!
         mergedMembers.set(name, sMember);
       } else {
-        // In both: check content
         const sContent = JSON.stringify({ role: sMember.role || '', note: sMember.note || '', projects: sMember.projects || [], attachments: sMember.attachments || [] });
         const cContent = JSON.stringify({ role: cMember.role || '', note: cMember.note || '', projects: cMember.projects || [], attachments: cMember.attachments || [] });
 
         if (sContent === cContent) {
           mergedMembers.set(name, sMember);
         } else {
-          // Client has edits for this member
           const sUpdateTime = sMember.updatedAt ? new Date(sMember.updatedAt).getTime() : 0;
           const cUpdateTime = cMember.updatedAt ? new Date(cMember.updatedAt).getTime() : 0;
 
@@ -1122,136 +1057,51 @@ app.post('/api/draft', (req, res) => {
       }
     }
 
-    const finalTeamData = sortTeamDataByRoster(Array.from(mergedMembers.values()));
+    const finalTeamData = dbRepo.sortTeamDataByRoster(Array.from(mergedMembers.values()));
     const newVersion = (serverDraft.version || 0) + 1;
+    const nowIso = new Date().toISOString();
 
-    const updatedDraft = {
-      date: targetDate,
-      teamData: finalTeamData,
-      version: newVersion,
-      lastUpdated: new Date().toISOString()
-    };
-    fs.writeFileSync(DRAFT_FILE, JSON.stringify(updatedDraft, null, 2));
+    const updatedDraft = await dbRepo.saveDailyDraft(targetDate, finalTeamData, newVersion, nowIso);
 
-    // Sync final merged teamData to submissions_log.json
+    // Sync final merged teamData to submissions log table
     try {
-      if (Array.isArray(sortedTeamData) && sortedTeamData.length > 0) {
-        let submissions = [];
-        if (fs.existsSync(SUBMISSIONS_FILE)) {
-          submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
-        }
-        sortedTeamData.forEach(m => {
-          if (!m.name) return;
-          const mName = m.name.toUpperCase();
-          const existingIdx = submissions.findIndex(s =>
-            s.member && s.member.toUpperCase() === mName && s.date === targetDate
-          );
-          const rec = {
-            id: existingIdx >= 0 ? submissions[existingIdx].id : `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      if (Array.isArray(finalTeamData) && finalTeamData.length > 0) {
+        for (const m of finalTeamData) {
+          if (!m.name) continue;
+          const mName = m.name.toUpperCase().trim();
+          await dbRepo.addOrUpdateSubmission({
+            id: `sub-${targetDate.replace(/\//g, '')}-${mName}`,
             member: mName,
             role: m.role || '',
             note: m.note || '',
             projects: m.projects || [],
+            attachments: m.attachments || [],
             date: targetDate,
             isoDate: getIsoDate(),
-            timestamp: m.updatedAt || new Date().toISOString()
-          };
-          if (existingIdx >= 0) {
-            submissions[existingIdx] = rec;
-          } else {
-            submissions.unshift(rec);
-          }
-        });
-        fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions.slice(0, 1000), null, 2));
+            timestamp: m.updatedAt || nowIso
+          });
+        }
       }
-    } catch (e) { }
+    } catch (e) {
+      console.error('Error syncing submissions from draft POST:', e.message);
+    }
 
-    res.json({ success: true, message: 'Draft saved', draft: updatedDraft, version: newVersion, lastUpdated: updatedDraft.lastUpdated });
+    res.json({
+      success: true,
+      message: 'Draft saved',
+      draft: updatedDraft,
+      version: newVersion,
+      lastUpdated: updatedDraft.lastUpdated
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Submissions History & Filter API (Daily, Weekly, Monthly, By Member & Date)
-app.get('/api/submissions', (req, res) => {
+// Submissions History & Filter API
+app.get('/api/submissions', async (req, res) => {
   try {
-    let submissions = [];
-    if (fs.existsSync(SUBMISSIONS_FILE)) {
-      submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
-    }
-
-    const { member, period, date, startDate, endDate, search } = req.query;
-
-    let filtered = [...submissions];
-
-    // Filter by Member
-    if (member && member.toUpperCase() !== 'ALL') {
-      const targetMember = member.toUpperCase().trim();
-      filtered = filtered.filter(s => s.member && s.member.toUpperCase().includes(targetMember));
-    }
-
-    // Reference Date calculation
-    const refDateStr = date || getIsoDate();
-    let refDate = new Date(refDateStr);
-    if (isNaN(refDate.getTime())) {
-      refDate = new Date();
-    }
-
-    // Filter by Period
-    if (period === 'daily') {
-      const targetDateFormatted = getFormattedToday(refDate);
-      const targetIso = getIsoDate(refDate);
-      filtered = filtered.filter(s => s.date === targetDateFormatted || s.isoDate === targetIso);
-    } else if (period === 'weekly') {
-      // Past 7 days from refDate
-      const endMs = refDate.getTime() + (24 * 60 * 60 * 1000); // end of refDate day
-      const startMs = endMs - (7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(s => {
-        const itemTime = new Date(s.timestamp || s.isoDate || s.date).getTime();
-        return !isNaN(itemTime) && itemTime >= startMs && itemTime <= endMs;
-      });
-    } else if (period === 'monthly') {
-      // Past 30 days or same Month & Year
-      const targetMonth = refDate.getMonth();
-      const targetYear = refDate.getFullYear();
-      filtered = filtered.filter(s => {
-        const itemDate = new Date(s.timestamp || s.isoDate || s.date);
-        if (!isNaN(itemDate.getTime())) {
-          return itemDate.getMonth() === targetMonth && itemDate.getFullYear() === targetYear;
-        }
-        // Fallback for DD/MM/YYYY
-        if (s.date && s.date.includes('/')) {
-          const parts = s.date.split('/');
-          return parseInt(parts[1], 10) === targetMonth + 1 && parseInt(parts[2], 10) === targetYear;
-        }
-        return true;
-      });
-    } else if (startDate && endDate) {
-      const sMs = new Date(startDate).getTime();
-      const eMs = new Date(endDate).getTime() + (24 * 60 * 60 * 1000);
-      filtered = filtered.filter(s => {
-        const itemTime = new Date(s.timestamp || s.isoDate || s.date).getTime();
-        return !isNaN(itemTime) && itemTime >= sMs && itemTime <= eMs;
-      });
-    }
-
-    // Filter by Search Query
-    if (search && search.trim()) {
-      const q = search.toLowerCase().trim();
-      filtered = filtered.filter(s => {
-        const memberMatch = (s.member || '').toLowerCase().includes(q);
-        const noteMatch = (s.note || '').toLowerCase().includes(q);
-        const projectMatch = (s.projects || []).some(p =>
-          (p.name || '').toLowerCase().includes(q) ||
-          (p.tasks || []).some(t => (typeof t === 'string' ? t : (t.text || '')).toLowerCase().includes(q))
-        );
-        return memberMatch || noteMatch || projectMatch;
-      });
-    }
-
-    // Sort newest first
-    filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-
+    const filtered = await dbRepo.getSubmissions(req.query);
     res.json({
       success: true,
       count: filtered.length,
@@ -1263,15 +1113,10 @@ app.get('/api/submissions', (req, res) => {
 });
 
 // Delete a submission log entry
-app.delete('/api/submissions/:id', (req, res) => {
+app.delete('/api/submissions/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    let submissions = [];
-    if (fs.existsSync(SUBMISSIONS_FILE)) {
-      submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8') || '[]');
-    }
-    const updated = submissions.filter(s => s.id !== id);
-    fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(updated, null, 2));
+    await dbRepo.deleteSubmission(id);
     res.json({ success: true, message: 'Submission record removed.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1279,37 +1124,28 @@ app.delete('/api/submissions/:id', (req, res) => {
 });
 
 // Config API
-app.get('/api/config', (req, res) => {
+app.get('/api/config', async (req, res) => {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     res.json({ success: true, config });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/config', (req, res) => {
+app.post('/api/config', async (req, res) => {
   try {
-    const { webhookUrl, reminderTime, employeeReminderTime, autoDispatch, adminPassword } = req.body;
-    const current = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
-    const updated = {
-      webhookUrl: webhookUrl !== undefined ? webhookUrl : current.webhookUrl,
-      reminderTime: reminderTime !== undefined ? reminderTime : current.reminderTime || '18:28',
-      employeeReminderTime: employeeReminderTime !== undefined ? employeeReminderTime : current.employeeReminderTime || '16:05',
-      autoDispatch: autoDispatch !== undefined ? autoDispatch : current.autoDispatch ?? true,
-      adminPassword: adminPassword !== undefined && adminPassword.trim() ? adminPassword.trim() : current.adminPassword || 'nisarg@2002'
-    };
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2));
-    res.json({ success: true, message: 'Configuration saved' });
+    const saved = await dbRepo.saveConfig(req.body);
+    res.json({ success: true, message: 'Configuration saved', config: saved });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 // History API
-app.get('/api/history', (req, res) => {
+app.get('/api/history', async (req, res) => {
   try {
-    const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8') || '[]');
+    const history = await dbRepo.getHistory();
     res.json({ success: true, history });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1327,8 +1163,10 @@ app.get('/api/firebase-config', (req, res) => {
         cfg = JSON.parse(Buffer.from(process.env.FIREBASE_CONFIG, 'base64').toString('utf8'));
       }
     } else {
+      const isVercel = Boolean(process.env.VERCEL);
+      const dataDir = isVercel ? path.join(os.tmpdir(), 'task_automation_data') : path.join(__dirname, 'data');
       const cfgCandidates = [
-        FIREBASE_CONFIG_FILE,
+        path.join(dataDir, 'firebase_config.json'),
         path.join(__dirname, 'data', 'firebase_config.json')
       ];
       for (const p of cfgCandidates) {
@@ -1357,148 +1195,96 @@ app.get('/api/push/public-key', (req, res) => {
   }
 });
 
-app.post('/api/fcm/subscribe', (req, res) => {
+app.post('/api/fcm/subscribe', async (req, res) => {
   try {
     const { token, fcmToken, role, member } = req.body;
     const registrationToken = token || fcmToken;
     if (!registrationToken) {
       return res.status(400).json({ success: false, error: 'FCM Token is required.' });
     }
-    const subs = getPushSubscriptions();
-    const existingIdx = subs.findIndex(s => s.fcmToken === registrationToken);
-    const subRecord = {
+    await dbRepo.savePushSubscription({
       id: `fcm-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: 'fcm',
       fcmToken: registrationToken,
       role: role || 'employee',
       member: member || '',
       updatedAt: new Date().toISOString()
-    };
-    if (existingIdx >= 0) {
-      subs[existingIdx] = subRecord;
-    } else {
-      subs.push(subRecord);
-    }
-    savePushSubscriptions(subs);
+    });
     res.json({ success: true, message: 'Firebase Cloud Messaging token registered!' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/fcm/unsubscribe', (req, res) => {
+app.post('/api/fcm/unsubscribe', async (req, res) => {
   try {
     const { token, fcmToken } = req.body;
     const registrationToken = token || fcmToken;
     if (!registrationToken) {
       return res.status(400).json({ success: false, error: 'Token is required.' });
     }
-    const subs = getPushSubscriptions();
-    const filtered = subs.filter(s => s.fcmToken !== registrationToken);
-    savePushSubscriptions(filtered);
+    await dbRepo.removePushSubscription(null, registrationToken);
     res.json({ success: true, message: 'FCM token removed.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', async (req, res) => {
   try {
     const { subscription, fcmToken, role, member } = req.body;
     if (fcmToken) {
-      const subs = getPushSubscriptions();
-      const existingIdx = subs.findIndex(s => s.fcmToken === fcmToken);
-      const subRecord = {
+      await dbRepo.savePushSubscription({
         id: `fcm-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         type: 'fcm',
         fcmToken: fcmToken,
         role: role || 'employee',
         member: member || '',
         updatedAt: new Date().toISOString()
-      };
-      if (existingIdx >= 0) {
-        subs[existingIdx] = subRecord;
-      } else {
-        subs.push(subRecord);
-      }
-      savePushSubscriptions(subs);
+      });
       return res.json({ success: true, message: 'Firebase token subscription registered!' });
     }
 
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ success: false, error: 'Subscription endpoint or fcmToken is required.' });
     }
-    const subs = getPushSubscriptions();
-    const existingIdx = subs.findIndex(s => s.subscription && s.subscription.endpoint === subscription.endpoint);
-    const subRecord = {
+    await dbRepo.savePushSubscription({
       id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       type: 'webpush',
       subscription: subscription,
       role: role || 'employee',
       member: member || '',
       updatedAt: new Date().toISOString()
-    };
-    if (existingIdx >= 0) {
-      subs[existingIdx] = subRecord;
-    } else {
-      subs.push(subRecord);
-    }
-    savePushSubscriptions(subs);
+    });
     res.json({ success: true, message: 'Push notification subscription registered!' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/push/unsubscribe', (req, res) => {
+app.post('/api/push/unsubscribe', async (req, res) => {
   try {
     const { endpoint, fcmToken } = req.body;
     if (!endpoint && !fcmToken) {
       return res.status(400).json({ success: false, error: 'Endpoint or fcmToken is required.' });
     }
-    const subs = getPushSubscriptions();
-    const filtered = subs.filter(s => {
-      if (endpoint && s.subscription && s.subscription.endpoint === endpoint) return false;
-      if (fcmToken && s.fcmToken === fcmToken) return false;
-      return true;
-    });
-    savePushSubscriptions(filtered);
+    await dbRepo.removePushSubscription(endpoint, fcmToken);
     res.json({ success: true, message: 'Unsubscribed from push notifications.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post('/api/push/test', async (req, res) => {
-  try {
-    const { role, title, body } = req.body;
-    const testPayload = {
-      title: title || '🧪 Scrum Notification Test',
-      body: body || (role === 'admin' ? 'Live Admin alert is working!' : 'Daily 6:00 PM task reminder is working!'),
-      url: role === 'admin' ? '/' : '/submit',
-      tag: 'test-push-notification'
-    };
-    let count = 0;
-    if (role === 'admin') {
-      count = await sendPushToAdmins(testPayload);
-    } else {
-      count = await sendPushToEmployees(testPayload);
-    }
-    res.json({ success: true, message: `Test push sent to ${count} ${role || 'employee'} device(s)!` });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // -----------------------------------------------------------------------------
-// Built-in 6:00 PM (Mon-Fri) Working Day Push Reminder & 6:28 PM Auto-Cron
+// Auto-Reminder & Auto-Dispatch Background Logic
 // -----------------------------------------------------------------------------
 let lastDispatchedDate = '';
 let last6pmReminderDate = '';
+let lastAutoLeaveDate = '';
 
-function check6pmEmployeeReminder() {
+async function check6pmEmployeeReminder() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     const targetReminderTime = config.employeeReminderTime || '18:00';
     const cutoffTime = config.reminderTime || '18:15';
     const cutoffStr = formatTimeDisplay(cutoffTime);
@@ -1518,19 +1304,18 @@ function check6pmEmployeeReminder() {
     const timeStr = `${hour}:${minute}`;
     const todayDate = getFormattedToday();
 
-    // Monday through Friday: Mon, Tue, Wed, Thu, Fri
     const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
 
     if (isWorkingDay && timeStr === targetReminderTime && last6pmReminderDate !== todayDate) {
       last6pmReminderDate = todayDate;
-      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Push Reminder to pending Employees...`);
+      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Push Reminder to all Employees...`);
       sendPushToEmployees({
         title: `⏰ Daily Task Reminder (${formatTimeDisplay(targetReminderTime)})`,
         body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
         url: '/submit',
         tag: 'employee-task-reminder'
-      }, { onlyPendingToday: true }).then(count => {
-        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} pending employee device(s).`);
+      }, { onlyPendingToday: false }).then(count => {
+        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} employee device(s).`);
       }).catch(err => {
         console.error('Error dispatching push reminder:', err.message);
       });
@@ -1540,9 +1325,41 @@ function check6pmEmployeeReminder() {
   }
 }
 
+async function check625pmAutoMarkLeave() {
+  try {
+    const config = await dbRepo.getConfig();
+    const targetLeaveTime = config.autoLeaveTime || '18:25';
+
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const weekdayStr = parts.find(p => p.type === 'weekday')?.value || '';
+    const hour = parts.find(p => p.type === 'hour')?.value || '';
+    const minute = parts.find(p => p.type === 'minute')?.value || '';
+    const timeStr = `${hour}:${minute}`;
+    const todayDate = getFormattedToday();
+
+    const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
+
+    if (isWorkingDay && timeStr === targetLeaveTime && lastAutoLeaveDate !== todayDate) {
+      lastAutoLeaveDate = todayDate;
+      console.log(`⏰ [Auto-Cron] Triggering ${targetLeaveTime} (Mon-Fri) Auto-Mark 'ON LEAVE' for pending employees...`);
+      await autoMarkPendingEmployeesLeave(todayDate);
+    }
+  } catch (err) {
+    console.error('Error in auto-leave cron:', err.message);
+  }
+}
+
 function buildFormattedOutput(draft) {
   let output = `*RESPECTED SIR,*\n*ALL PROJECT STATUS*\n*DATE:-${draft.date || getFormattedToday()}*\n\n`;
-  const sortedMembers = sortTeamDataByRoster(draft.teamData || []);
+  const sortedMembers = dbRepo.sortTeamDataByRoster(draft.teamData || []);
   sortedMembers.forEach(member => {
     let roleStr = member.role ? `(${member.role})` : '';
     let cleanNote = member.note ? member.note.replace(/^[:-]+|[:-]+$/g, '').trim() : '';
@@ -1579,7 +1396,7 @@ function buildFormattedOutput(draft) {
 
 async function checkAndAutoDispatch() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     if (!config.autoDispatch || !config.webhookUrl) return;
 
     const now = new Date();
@@ -1592,7 +1409,9 @@ async function checkAndAutoDispatch() {
 
     if (currentTime === targetTime && lastDispatchedDate !== todayStr) {
       console.log(`⏰ [Auto-Cron] Triggering ${formatTimeDisplay(targetTime)} Daily Status Auto-Dispatch...`);
-      const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+      // Ensure any pending employees are marked as ON LEAVE before dispatching
+      await autoMarkPendingEmployeesLeave(todayStr);
+      const draft = await dbRepo.getDailyDraft(todayStr);
 
       if (draft.teamData && draft.teamData.length > 0) {
         const text = buildFormattedOutput(draft);
@@ -1605,15 +1424,12 @@ async function checkAndAutoDispatch() {
         if (response.ok) {
           console.log(`✅ [Auto-Cron] Status Report automatically posted to Google Chat!`);
           lastDispatchedDate = todayStr;
-
-          const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8') || '[]');
-          history.unshift({
+          await dbRepo.addHistory({
             id: Date.now().toString(),
             timestamp: new Date().toISOString(),
             formattedText: text,
             status: `Auto-Dispatched by Bot (${formatTimeDisplay(targetTime)})`
           });
-          fs.writeFileSync(HISTORY_FILE, JSON.stringify(history.slice(0, 100), null, 2));
         } else {
           console.error(`❌ [Auto-Cron] Webhook error:`, await response.text());
         }
@@ -1627,13 +1443,14 @@ async function checkAndAutoDispatch() {
 // Background scheduler running every 30 seconds
 setInterval(() => {
   check6pmEmployeeReminder();
+  check625pmAutoMarkLeave();
   checkAndAutoDispatch();
 }, 30000);
 
-// Vercel Cron Endpoint for 6:00 PM Mon-Fri employee push reminder
+// Vercel Cron Endpoint for Mon-Fri employee push reminder
 app.get('/api/cron-reminder', async (req, res) => {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     const cutoffStr = formatTimeDisplay(config.reminderTime || '18:15');
     const reminderStr = formatTimeDisplay(config.employeeReminderTime || '18:00');
 
@@ -1642,21 +1459,40 @@ app.get('/api/cron-reminder', async (req, res) => {
       body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
       url: '/submit',
       tag: 'employee-task-reminder'
-    }, { onlyPendingToday: true });
-    return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} pending device(s)!` });
+    }, { onlyPendingToday: false });
+    return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} device(s)!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Vercel Cron Endpoint for 6:28 PM auto-dispatch
+// Vercel Cron Endpoint for 6:25 PM Auto-marking ON LEAVE
+app.get('/api/cron-auto-leave', async (req, res) => {
+  try {
+    const todayStr = getFormattedToday();
+    const result = await autoMarkPendingEmployeesLeave(todayStr);
+    return res.json({
+      success: true,
+      message: result.updated
+        ? 'Pending employees marked as ON LEAVE successfully!'
+        : 'No pending employees to update or already marked.'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Vercel Cron Endpoint for auto-dispatch
 app.get('/api/cron-dispatch', async (req, res) => {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8') || '{}');
+    const config = await dbRepo.getConfig();
     if (!config.webhookUrl) {
       return res.status(400).json({ success: false, error: 'Webhook URL not configured' });
     }
-    const draft = JSON.parse(fs.readFileSync(DRAFT_FILE, 'utf8') || '{"date":"","teamData":[]}');
+    const todayStr = getFormattedToday();
+    // Ensure any pending employees are marked ON LEAVE before dispatching
+    await autoMarkPendingEmployeesLeave(todayStr);
+    const draft = await dbRepo.getDailyDraft(todayStr);
     if (!draft.teamData || draft.teamData.length === 0) {
       return res.json({ success: true, message: 'No tasks to dispatch today.' });
     }
@@ -1669,6 +1505,12 @@ app.get('/api/cron-dispatch', async (req, res) => {
     });
 
     if (response.ok) {
+      await dbRepo.addHistory({
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        formattedText: text,
+        status: `Auto-Dispatched via Vercel Cron (${formatTimeDisplay(config.reminderTime)})`
+      });
       return res.json({ success: true, message: 'Dispatched successfully via Vercel Cron!' });
     } else {
       return res.status(500).json({ success: false, error: await response.text() });
@@ -1688,6 +1530,7 @@ function startServer(port = 3050) {
     console.log(`🚀 Scrum Task Automation Server running!`);
     console.log(`💻 Admin Dashboard : http://localhost:${port}`);
     console.log(`📱 Team Submit Link: http://${localIp}:${port}/submit`);
+    console.log(`🗄️ Database Mode    : ${dbRepo.isDbConnected() ? 'Neon PostgreSQL (Drizzle ORM)' : 'Local File Storage (Set DATABASE_URL for Neon)'}`);
     console.log(`======================================================\n`);
   });
 

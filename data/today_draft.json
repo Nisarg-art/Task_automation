@@ -1,6 +1,87 @@
 {
-  "date": "",
-  "teamData": [],
-  "version": 0,
-  "lastUpdated": ""
+  "date": "16/09/2026",
+  "teamData": [
+    {
+      "name": "HARSHAD",
+      "note": "ON LEAVE",
+      "role": "",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "KIRAN",
+      "note": "ON LEAVE",
+      "role": "",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "DHRUV",
+      "note": "ON LEAVE",
+      "role": "",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "PRANAV",
+      "role": "",
+      "note": "ON LEAVE",
+      "projects": [],
+      "attachments": [],
+      "updatedAt": "2026-09-16T11:36:11.519Z"
+    },
+    {
+      "name": "KARTIK",
+      "note": "ON LEAVE",
+      "role": "",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "DEVERSH",
+      "note": "ON LEAVE",
+      "role": "Nodejs Developer",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "RADHEY",
+      "note": "ON LEAVE",
+      "role": "Nodejs Developer",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "AJAY",
+      "note": "ON LEAVE",
+      "role": "Designer",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "HASTI",
+      "note": "ON LEAVE",
+      "role": "Designer",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    },
+    {
+      "name": "NISARG",
+      "note": "ON LEAVE",
+      "role": "QA & Scrum Master",
+      "projects": [],
+      "updatedAt": "2026-09-16T04:13:02.363Z",
+      "attachments": []
+    }
+  ],
+  "version": 3,
+  "lastUpdated": "2026-09-16T11:36:11.519Z"
 }

@@ -53,21 +53,27 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  const fullTargetUrl = new URL(targetUrl, self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window is already open with the app, focus it and navigate
+      // If a window is already open on this origin, send message and focus
       for (const client of clientList) {
-        if ('focus' in client) {
-          if (client.url.includes(targetUrl) || client.url.endsWith('/')) {
-            client.navigate(targetUrl);
-            return client.focus();
-          }
+        if ('focus' in client && client.url.startsWith(self.location.origin)) {
+          try {
+            client.postMessage({
+              type: 'TASK_NOTIFICATION_CLICK',
+              url: targetUrl,
+              data: event.notification.data
+            });
+          } catch (e) {}
+          client.navigate(fullTargetUrl);
+          return client.focus();
         }
       }
       // Otherwise open a new window
       if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
+        return self.clients.openWindow(fullTargetUrl);
       }
     })
   );

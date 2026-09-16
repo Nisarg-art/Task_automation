@@ -865,6 +865,21 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
       loginPasswordInput.value = '';
     }
 
+    function getDefaultProjectForMember(name) {
+      const norm = (name || '').toUpperCase().trim();
+      if (norm.includes('HARSHAD')) return 'RankMyTrip';
+      if (norm.includes('KIRAN')) return 'FirstText App';
+      if (norm.includes('DHRUV')) return 'Crystal Wish app';
+      if (norm.includes('PRANAV')) return "Happy Reward's Dashboard Application";
+      if (norm.includes('KARTIK')) return 'Happy Reward Shopify';
+      if (norm.includes('DEVERSH')) return 'SEC EDGAR Terminal';
+      if (norm.includes('RADHEY')) return 'AI-powered SEO/marketing platform';
+      if (norm.includes('AJAY')) return 'Alarm App';
+      if (norm.includes('HASTI')) return 'AI Life Mentor';
+      if (norm.includes('NISARG')) return 'QA & Testing';
+      return 'General Tasks';
+    }
+
     function showSubmissionForm(user) {
       currentUser = user;
       loginSection.classList.add('hidden');
@@ -875,10 +890,18 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
       displayHeaderName.textContent = user.name;
       lockedMemberDisplay.textContent = user.role ? `${user.name} (${user.role})` : user.name;
 
+      const defProj = getDefaultProjectForMember(user.name);
+      const firstProjInput = document.querySelector('.proj-name-input');
+      if (firstProjInput && !firstProjInput.value.trim()) {
+        firstProjInput.value = defProj;
+      }
+
       checkSubmissionStatus(user);
 
-      // On HTTPS/Vercel, if notifications haven't been enabled yet, prompt user
-      if (typeof Notification !== 'undefined' && Notification.permission === 'default' && swRegistration) {
+      // Auto-sync push subscription if permission already granted
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        syncPushSubscription(user);
+      } else if (typeof Notification !== 'undefined' && Notification.permission === 'default' && swRegistration) {
         setTimeout(() => {
           if (!isPushSubscribed) {
             togglePushSubscription();
@@ -1320,6 +1343,70 @@ Upload new build => Done"></textarea>
       } finally {
         btnPushReminderToggle.disabled = false;
         updatePushUI();
+      }
+    }
+
+    async function syncPushSubscription(user) {
+      if (!swRegistration || !user || !user.name) return;
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+      const memberName = user.name.toUpperCase().trim();
+
+      // 1. Sync FCM Token if available
+      if (fcmMessaging && firebaseConfig && firebaseConfig.vapidKey) {
+        try {
+          const token = await fcmMessaging.getToken({
+            vapidKey: firebaseConfig.vapidKey,
+            serviceWorkerRegistration: swRegistration
+          });
+          if (token) {
+            currentFcmToken = token;
+            localStorage.setItem('fcm_employee_token', token);
+            await fetch('/api/fcm/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: token,
+                role: 'employee',
+                member: memberName
+              })
+            });
+          }
+        } catch (fcmErr) {
+          console.warn('FCM sync note:', fcmErr.message);
+        }
+      }
+
+      // 2. Sync WebPush Subscription
+      try {
+        let sub = await swRegistration.pushManager.getSubscription();
+        if (!sub) {
+          const res = await fetch('/api/push/public-key');
+          const data = await res.json();
+          if (data.success && data.publicKey) {
+            const applicationServerKey = urlBase64ToUint8Array(data.publicKey);
+            sub = await swRegistration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: applicationServerKey
+            });
+          }
+        }
+
+        if (sub) {
+          await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscription: sub,
+              role: 'employee',
+              member: memberName
+            })
+          });
+          isPushSubscribed = true;
+          updatePushUI();
+        }
+      } catch (wpErr) {
+        console.warn('WebPush sync note:', wpErr.message);
       }
     }
 

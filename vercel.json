@@ -26,6 +26,10 @@
       "schedule": "30 12 * * 1-5"
     },
     {
+      "path": "/api/cron-auto-leave",
+      "schedule": "55 12 * * 1-5"
+    },
+    {
       "path": "/api/cron-dispatch",
       "schedule": "58 12 * * *"
     }

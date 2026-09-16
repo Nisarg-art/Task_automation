@@ -32,22 +32,68 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
+// Handle standard WebPush events
+self.addEventListener('push', (event) => {
+  console.log('[firebase-messaging-sw.js] Received push event:', event);
+  let data = {
+    title: '⏰ Daily Status Task Reminder',
+    body: 'Please submit your daily task status report.',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    url: '/submit',
+    tag: 'daily-scrum-reminder'
+  };
+
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      data = Object.assign(data, parsed);
+    }
+  } catch (e) {
+    if (event.data) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || '/favicon.ico',
+    badge: data.badge || '/favicon.ico',
+    data: {
+      url: data.url || '/submit'
+    },
+    tag: data.tag || 'daily-task-alert',
+    renotify: true,
+    vibrate: [200, 100, 200]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+  const fullTargetUrl = new URL(targetUrl, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ('focus' in client) {
-          if (client.url.includes(targetUrl) || client.url.endsWith('/')) {
-            client.navigate(targetUrl);
-            return client.focus();
-          }
+        if ('focus' in client && client.url.startsWith(self.location.origin)) {
+          try {
+            client.postMessage({
+              type: 'TASK_NOTIFICATION_CLICK',
+              url: targetUrl,
+              data: event.notification.data
+            });
+          } catch (e) {}
+          client.navigate(fullTargetUrl);
+          return client.focus();
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(fullTargetUrl);
       }
     })
   );

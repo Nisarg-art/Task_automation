@@ -648,6 +648,69 @@ function copyAllPasscodes() {
   });
 }
 
+function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Tasks') {
+  if (!rawText || !rawText.trim()) return [];
+
+  const trimmed = rawText.trim();
+  const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (rawLines.length === 0) return [];
+
+  const projList = [];
+  let currentProject = null;
+
+  function isTaskLine(line) {
+    if (/[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
+    if (/\b(DONE|WIP)\b/i.test(line)) return true;
+    if (/^[-•*#\d\.\)\s]+/.test(line) && /^[-•*#\d\.\)]+\s*[a-zA-Z]/.test(line)) return true;
+    return false;
+  }
+
+  function cleanTaskLine(line) {
+    let clean = line.replace(/^[-•*#]+\s*/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+    let status = 'Done';
+
+    if (/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i.test(clean) || /\bWIP\b\s*$/i.test(clean)) {
+      status = 'WIP';
+      clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i, '').replace(/\bWIP\b\s*$/i, '').trim();
+    } else if (/[-—–=>:]+\s*(done|completed|complete)\s*$/i.test(clean) || /\b(DONE|Done)\b\s*$/i.test(clean)) {
+      status = 'Done';
+      clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)\s*$/i, '').replace(/\b(DONE|Done)\b\s*$/i, '').trim();
+    }
+
+    clean = clean.replace(/[-—–=>:]+$/, '').trim();
+    return { text: clean, status };
+  }
+
+  function cleanProjectName(line) {
+    return line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').replace(/\s*General Tasks\s*$/i, '').trim();
+  }
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    const isExplicitHeader = /[:-]+$/.test(line) && !isTaskLine(line);
+    const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
+
+    const isProjHeader = isExplicitHeader || (!hasStatus && !/^[-•*]\s*[a-zA-Z0-9]/.test(line) && line.length < 80 && (i === 0 || !isTaskLine(line)));
+
+    if (isProjHeader) {
+      const pName = cleanProjectName(line) || defaultProjectName;
+      currentProject = { name: pName, tasks: [] };
+      projList.push(currentProject);
+    } else {
+      if (!currentProject) {
+        currentProject = { name: defaultProjectName, tasks: [] };
+        projList.push(currentProject);
+      }
+      const parsed = cleanTaskLine(line);
+      if (parsed.text) {
+        currentProject.tasks.push(parsed);
+      }
+    }
+  }
+
+  return projList.filter(p => p.tasks && p.tasks.length > 0);
+}
+
 // -----------------------------------------------------------------------------
 // Single 1-on-1 Chat Update Ingestion Engine
 // -----------------------------------------------------------------------------
@@ -662,13 +725,13 @@ function mergeSingleUpdate() {
   let parsedMembers = parseRawTasks(text);
 
   if (parsedMembers.length === 0) {
-    // If text didn't contain explicit name header but user selected a member
     if (selectedTarget && selectedTarget !== 'AUTO') {
+      const parsedProjects = parseMemberProjectsAndTasks(text, getDefaultProjectForMember(selectedTarget));
       parsedMembers = [{
         name: selectedTarget,
         role: getRoleForMember(selectedTarget),
         note: '',
-        projects: [{
+        projects: parsedProjects.length > 0 ? parsedProjects : [{
           name: getDefaultProjectForMember(selectedTarget),
           tasks: text.split('\n').filter(l => l.trim()).map(l => parseTaskStatus(l))
         }]
@@ -722,19 +785,29 @@ function renderChecklistTracker() {
   let submittedCount = 0;
 
   const currentNames = state.teamData
-    .filter(m => m.projects && m.projects.length > 0 && m.projects.some(p => p.tasks && p.tasks.length > 0))
+    .filter(m => (m.projects && m.projects.length > 0 && m.projects.some(p => p.tasks && p.tasks.length > 0)) || (m.note && m.note.trim() && !m.note.toUpperCase().includes('LEAVE')))
     .map(m => (m.name || '').toUpperCase().trim());
 
   DEFAULT_TEAM_ROSTER.forEach(member => {
     const isSubmitted = currentNames.includes(member.name.toUpperCase());
-    if (isSubmitted) submittedCount++;
+    const memberData = state.teamData.find(m => (m.name || '').toUpperCase().trim() === member.name.toUpperCase());
+    const isLeave = memberData && (memberData.note || '').toUpperCase().includes('LEAVE');
+    if (isSubmitted || isLeave) submittedCount++;
 
     const pill = document.createElement('div');
-    pill.className = `roster-pill ${isSubmitted ? 'submitted' : 'pending'}`;
-    pill.innerHTML = `
-      <span class="pill-dot ${isSubmitted ? 'green' : 'grey'}"></span>
-      <span>${member.name}</span>
-    `;
+    if (isLeave) {
+      pill.className = 'roster-pill leave';
+      pill.innerHTML = `
+        <span class="pill-dot red"></span>
+        <span>${member.name} (Leave)</span>
+      `;
+    } else {
+      pill.className = `roster-pill ${isSubmitted ? 'submitted' : 'pending'}`;
+      pill.innerHTML = `
+        <span class="pill-dot ${isSubmitted ? 'green' : 'grey'}"></span>
+        <span>${member.name}</span>
+      `;
+    }
 
     pill.addEventListener('click', () => {
       quickMemberSelect.value = member.name;
@@ -1039,6 +1112,7 @@ function renderBuilder() {
   state.teamData.forEach((member, mIdx) => {
     const card = document.createElement('div');
     card.className = 'member-card';
+    card.setAttribute('data-member-name', (member.name || '').toUpperCase().trim());
 
     const cardHeader = document.createElement('div');
     cardHeader.className = 'member-card-header';
@@ -1083,7 +1157,9 @@ function renderBuilder() {
     noteSelect.className = 'input-field input-role';
     const noteOptions = [
       { label: 'Full Day', val: '' },
-      { label: 'ON HALF DAY', val: 'ON HALF DAY' }
+      { label: 'ON HALF DAY', val: 'ON HALF DAY' },
+      { label: 'ON LEAVE', val: 'ON LEAVE' },
+      { label: 'WFH', val: 'WFH' }
     ];
     noteOptions.forEach(opt => {
       const optEl = document.createElement('option');
@@ -2409,8 +2485,6 @@ let adminFcmMessaging = null;
 async function initAdminPushServiceWorker() {
   const btnAdminPushToggle = document.getElementById('btnAdminPushToggle');
   const btnAdminSettingsPushToggle = document.getElementById('btnAdminSettingsPushToggle');
-  const btnTestAdminPush = document.getElementById('btnTestAdminPush');
-  const btnTestEmployeePush = document.getElementById('btnTestEmployeePush');
 
   if ('serviceWorker' in navigator && 'PushManager' in window) {
     try {
@@ -2431,19 +2505,50 @@ async function initAdminPushServiceWorker() {
           adminFcmMessaging.onMessage((payload) => {
             const title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || '🔔 Scrum Admin Alert';
             const body = (payload.notification && payload.notification.body) || (payload.data && payload.data.body) || 'New task submission received.';
+            const memberName = (payload.data && payload.data.memberName) || '';
+
             showToast(`🔔 ${title}: ${body}`, 'info');
+            loadTodayDraft(false, true).then(() => {
+              if (memberName) {
+                showTaskUpdateNotificationModal(memberName, payload.data || {});
+              }
+            });
+
             if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-              new Notification(title, {
-                body: body,
-                icon: '/favicon.ico',
-                tag: 'admin-submission-alert'
-              });
+              try {
+                new Notification(title, {
+                  body: body,
+                  icon: '/favicon.ico',
+                  tag: 'admin-submission-alert'
+                });
+              } catch (e) {}
             }
           });
         }
       } catch (cfgErr) {
         console.warn('Admin Firebase init notice:', cfgErr.message);
       }
+
+      // Listen for notification clicks communicated by the Service Worker
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && (event.data.type === 'TASK_NOTIFICATION_CLICK' || event.data.type === 'TASK_UPDATE_NOTIFICATION')) {
+          const url = event.data.url || '';
+          let memberName = '';
+          if (event.data.data && event.data.data.memberName) {
+            memberName = event.data.data.memberName;
+          } else if (url.includes('updatedMember=')) {
+            try {
+              const u = new URL(url, window.location.origin);
+              memberName = u.searchParams.get('updatedMember') || '';
+            } catch (e) {}
+          }
+          if (memberName) {
+            loadTodayDraft(false, true).then(() => {
+              showTaskUpdateNotificationModal(memberName, event.data.data || {});
+            });
+          }
+        }
+      });
 
       await checkAdminPushSubscription();
     } catch (err) {
@@ -2459,12 +2564,6 @@ async function initAdminPushServiceWorker() {
   }
   if (btnAdminSettingsPushToggle) {
     btnAdminSettingsPushToggle.addEventListener('click', toggleAdminPushSubscription);
-  }
-  if (btnTestAdminPush) {
-    btnTestAdminPush.addEventListener('click', () => triggerPushTest('admin'));
-  }
-  if (btnTestEmployeePush) {
-    btnTestEmployeePush.addEventListener('click', () => triggerPushTest('employee'));
   }
 }
 
@@ -2489,32 +2588,178 @@ function updateAdminPushUI() {
 
   if (isAdminPushSubscribed) {
     if (adminPushIcon) adminPushIcon.textContent = '🔔';
-    if (adminPushText) adminPushText.textContent = 'Push Alerts On';
+    if (adminPushText) adminPushText.textContent = 'Task Alerts On';
     if (btnAdminPushToggle) {
       btnAdminPushToggle.classList.add('btn-primary');
       btnAdminPushToggle.classList.remove('btn-secondary');
-      btnAdminPushToggle.title = 'Push alerts active! Click to disable.';
+      btnAdminPushToggle.title = 'Instant task update notifications are active on this device!';
     }
-    if (adminSettingsPushText) adminSettingsPushText.textContent = '✓ Push Alerts Active';
+    if (adminSettingsPushText) adminSettingsPushText.textContent = 'Push Alerts: Active';
     if (btnAdminSettingsPushToggle) {
       btnAdminSettingsPushToggle.classList.add('btn-primary');
       btnAdminSettingsPushToggle.classList.remove('btn-outline');
     }
   } else {
     if (adminPushIcon) adminPushIcon.textContent = '🔕';
-    if (adminPushText) adminPushText.textContent = 'Enable Push';
+    if (adminPushText) adminPushText.textContent = 'Push Alerts Off';
     if (btnAdminPushToggle) {
       btnAdminPushToggle.classList.remove('btn-primary');
       btnAdminPushToggle.classList.add('btn-secondary');
-      btnAdminPushToggle.title = 'Click to enable instant push notifications on this device';
+      btnAdminPushToggle.title = 'Click to enable instant task update notifications on this device';
     }
-    if (adminSettingsPushText) adminSettingsPushText.textContent = 'Enable Push';
+    if (adminSettingsPushText) adminSettingsPushText.textContent = 'Enable Task Alerts';
     if (btnAdminSettingsPushToggle) {
       btnAdminSettingsPushToggle.classList.remove('btn-primary');
       btnAdminSettingsPushToggle.classList.add('btn-outline');
     }
   }
 }
+
+// -----------------------------------------------------------------------------
+// Task Update Notification Modal & Member Card Highlight
+// -----------------------------------------------------------------------------
+function showTaskUpdateNotificationModal(memberName, payloadDetails = {}) {
+  if (!memberName) return;
+  const norm = memberName.toUpperCase().trim();
+  const modal = document.getElementById('taskUpdateAlertModal');
+  const memberEl = document.getElementById('taskUpdateAlertMember');
+  const roleEl = document.getElementById('taskUpdateAlertRole');
+  const tsEl = document.getElementById('taskUpdateAlertTimestamp');
+  const descEl = document.getElementById('taskUpdateAlertDesc');
+  const listEl = document.getElementById('taskUpdateAlertProjectsList');
+  const btnFocus = document.getElementById('btnFocusTaskUpdateMember');
+  const btnDismiss = document.getElementById('btnDismissTaskUpdateModal');
+  const btnClose = document.getElementById('btnCloseTaskUpdateModal');
+
+  if (!modal) {
+    showToast(`📋 ${memberName} just submitted their daily task update!`, 'success');
+    highlightUpdatedMember(norm);
+    return;
+  }
+
+  // Find member in loaded team data
+  const memberData = (state.teamData || []).find(m => (m.name || '').toUpperCase().trim() === norm);
+
+  if (memberEl) memberEl.textContent = memberData ? memberData.name : norm;
+  if (roleEl) roleEl.textContent = (memberData && memberData.role) ? memberData.role : 'Team Member';
+  if (tsEl) {
+    const timeStr = payloadDetails.timestamp ? new Date(payloadDetails.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    tsEl.textContent = `Submitted at ${timeStr} • Daily Scrum Draft Updated`;
+  }
+  if (descEl) {
+    const projCount = (memberData && memberData.projects) ? memberData.projects.length : (payloadDetails.projectsCount || 1);
+    descEl.textContent = `${memberData ? memberData.name : norm} has submitted task updates across ${projCount} project(s).`;
+  }
+
+  if (listEl) {
+    listEl.innerHTML = '';
+    if (memberData && Array.isArray(memberData.projects) && memberData.projects.length > 0) {
+      memberData.projects.forEach(proj => {
+        const projBox = document.createElement('div');
+        projBox.className = 'task-update-project-box';
+
+        const pHeader = document.createElement('div');
+        pHeader.className = 'task-update-proj-header';
+        pHeader.innerHTML = `<span>📁</span> <span>${escapeHtml(proj.name || 'General Tasks')}</span>`;
+        projBox.appendChild(pHeader);
+
+        if (Array.isArray(proj.tasks) && proj.tasks.length > 0) {
+          proj.tasks.forEach(t => {
+            const tItem = document.createElement('div');
+            tItem.className = 'task-update-task-item';
+            const isDone = (t.status === 'Done');
+            const pillClass = isDone ? 'task-status-pill-done' : 'task-status-pill-wip';
+            const pillText = isDone ? '✓ Done' : '⏳ WIP';
+            tItem.innerHTML = `<span class="${pillClass}">${pillText}</span> <span>${escapeHtml(t.text || '')}</span>`;
+            projBox.appendChild(tItem);
+          });
+        } else {
+          const emptyTasks = document.createElement('div');
+          emptyTasks.style.fontSize = '0.78rem';
+          emptyTasks.style.color = '#94a3b8';
+          emptyTasks.textContent = 'No detailed sub-tasks listed.';
+          projBox.appendChild(emptyTasks);
+        }
+        listEl.appendChild(projBox);
+      });
+    } else {
+      const fallbackBox = document.createElement('div');
+      fallbackBox.className = 'task-update-project-box';
+      fallbackBox.innerHTML = `<div style="font-size:0.82rem; color:#cbd5e1;">📋 Tasks submitted and synced into the daily scrum draft. Click below to inspect their card.</div>`;
+      listEl.appendChild(fallbackBox);
+    }
+  }
+
+  // Show the modal
+  modal.classList.remove('hidden');
+
+  const closeModal = () => {
+    modal.classList.add('hidden');
+  };
+
+  if (btnClose) btnClose.onclick = closeModal;
+  if (btnDismiss) btnDismiss.onclick = closeModal;
+  if (btnFocus) {
+    btnFocus.onclick = () => {
+      closeModal();
+      highlightUpdatedMember(norm);
+    };
+  }
+
+  // Also immediately highlight the card in the background
+  highlightUpdatedMember(norm);
+}
+
+function highlightUpdatedMember(memberName, retryCount = 0) {
+  if (!memberName) return;
+  const norm = memberName.toUpperCase().trim();
+  const cards = document.querySelectorAll('.member-card');
+  let targetCard = null;
+
+  for (const c of cards) {
+    if (c.getAttribute('data-member-name') === norm) {
+      targetCard = c;
+      break;
+    }
+  }
+
+  if (targetCard) {
+    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    targetCard.classList.add('highlight-pulse');
+
+    // Add glowing live update badge in card header
+    const header = targetCard.querySelector('.member-card-header');
+    if (header && !header.querySelector('.live-update-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'live-update-badge';
+      badge.textContent = '⚡ UPDATED JUST NOW';
+      header.appendChild(badge);
+      setTimeout(() => {
+        if (badge.parentNode) badge.parentNode.removeChild(badge);
+      }, 9000);
+    }
+
+    setTimeout(() => {
+      targetCard.classList.remove('highlight-pulse');
+    }, 6000);
+  } else if (retryCount < 15) {
+    setTimeout(() => highlightUpdatedMember(memberName, retryCount + 1), 250);
+  }
+}
+
+// Check if launched from a Task Update Push Notification click
+document.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const updatedMember = urlParams.get('updatedMember');
+  if (updatedMember) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setTimeout(() => {
+      loadTodayDraft(false, true).then(() => {
+        showTaskUpdateNotificationModal(updatedMember);
+      });
+    }, 450);
+  }
+});
 
 async function toggleAdminPushSubscription() {
   if (!adminSwRegistration) {
@@ -2612,38 +2857,3 @@ async function toggleAdminPushSubscription() {
   }
 }
 
-async function triggerPushTest(role) {
-  const resultEl = document.getElementById('pushTestResult');
-  if (resultEl) {
-    resultEl.classList.remove('hidden', 'success', 'error');
-    resultEl.textContent = `Dispatching test push to ${role}...`;
-  }
-
-  try {
-    const res = await fetch('/api/push/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: role })
-    });
-    const data = await res.json();
-    if (data.success) {
-      if (resultEl) {
-        resultEl.className = 'webhook-test-results success';
-        resultEl.textContent = `✓ ${data.message}`;
-      }
-      showToast(data.message, 'success');
-    } else {
-      if (resultEl) {
-        resultEl.className = 'webhook-test-results error';
-        resultEl.textContent = `✗ ${data.error}`;
-      }
-      showToast(data.error || 'Test failed', 'error');
-    }
-  } catch (err) {
-    if (resultEl) {
-      resultEl.className = 'webhook-test-results error';
-      resultEl.textContent = `✗ Test failed: ${err.message}`;
-    }
-    showToast('Push test failed: ' + err.message, 'error');
-  }
-}

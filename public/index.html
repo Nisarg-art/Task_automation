@@ -490,16 +490,6 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
               </button>
             </div>
           </div>
-
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button type="button" id="btnTestAdminPush" class="btn btn-secondary btn-sm">
-              🧪 Test Admin Alert (This Device)
-            </button>
-            <button type="button" id="btnTestEmployeePush" class="btn btn-secondary btn-sm">
-              📢 Test 6:00 PM Employee Reminder
-            </button>
-          </div>
-          <div id="pushTestResult" class="webhook-test-results hidden" style="margin-top: 10px;"></div>
         </div>
 
         <!-- Sub-Tab 3: Employee Passwords & Access -->
@@ -561,6 +551,55 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
         <button type="button" id="btnLightboxClose" class="btn btn-xs btn-outline" style="color: white; border-color: rgba(255,255,255,0.4);">✕ Close</button>
       </div>
       <img id="lightboxImg" class="lightbox-img" src="" alt="Full Resolution Screenshot">
+    </div>
+  </div>
+
+  <!-- Task Update Notification Modal (Displays when admin clicks push notification or receives live update) -->
+  <div id="taskUpdateAlertModal" class="modal-backdrop hidden" style="z-index: 99999;">
+    <div class="modal-card" style="max-width: 540px; border: 1px solid rgba(16, 185, 129, 0.4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(16, 185, 129, 0.25);">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+        <div class="modal-title-wrap" style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+            📋
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #f8fafc;">Task Update Notification</h3>
+            <div style="font-size: 0.75rem; color: #34d399; margin-top: 2px;" id="taskUpdateAlertTimestamp">Just now via Push Notification</div>
+          </div>
+        </div>
+        <button type="button" id="btnCloseTaskUpdateModal" class="btn-close" style="font-size: 1.4rem;">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 16px 0;">
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 10px; padding: 14px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="taskUpdateAlertMember" style="font-size: 1.1rem; font-weight: 800; color: #60a5fa; letter-spacing: 0.5px;">HARSHAD</span>
+              <span id="taskUpdateAlertRole" class="badge" style="background: rgba(59, 130, 246, 0.15); color: #93c5fd; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px;">Nodejs Developer</span>
+            </div>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.72rem; font-weight: 600; padding: 3px 8px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.3);">
+              ✓ Submitted
+            </span>
+          </div>
+          <p id="taskUpdateAlertDesc" style="font-size: 0.84rem; color: #cbd5e1; margin: 0; line-height: 1.4;">
+            Updated task details for today's daily scrum draft.
+          </p>
+        </div>
+
+        <div style="font-size: 0.8rem; font-weight: 600; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+          Submitted Tasks Breakdown:
+        </div>
+        <div id="taskUpdateAlertProjectsList" style="max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+          <!-- Projects and tasks rendered dynamically -->
+        </div>
+      </div>
+
+      <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" id="btnDismissTaskUpdateModal" class="btn btn-secondary" style="font-size: 0.85rem;">Dismiss</button>
+        <button type="button" id="btnFocusTaskUpdateMember" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981, #059669); border: none; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+          <span>🔍 View Member's Card</span>
+        </button>
+      </div>
     </div>
   </div>
 
