@@ -324,6 +324,11 @@ async function sendPushToEmployees(payload, options = {}) {
 
   const targetMember = options.targetMember ? options.targetMember.toUpperCase().trim() : '';
 
+  let submittedSet = new Set();
+  if (options.onlyPendingToday) {
+    submittedSet = await getTodaySubmittedMembersSet();
+  }
+
   for (const sub of subs) {
     if (sub.role === 'admin') {
       validSubs.push(sub);
@@ -334,6 +339,15 @@ async function sendPushToEmployees(payload, options = {}) {
     if (targetMember && sub.member && sub.member.toUpperCase().trim() !== targetMember) {
       validSubs.push(sub);
       continue;
+    }
+
+    // If only pending members should receive the reminder, skip if member already submitted today
+    if (options.onlyPendingToday && sub.member) {
+      const mUpper = sub.member.toUpperCase().trim();
+      if (submittedSet.has(mUpper)) {
+        validSubs.push(sub);
+        continue;
+      }
     }
 
     if (sub.fcmToken) {
@@ -701,7 +715,7 @@ app.post('/api/users/update', async (req, res) => {
 });
 
 // Check submission status, user draft, and lock state
-app.get('/api/submission-status', async (req, res) => {
+async function getMemberSubmissionStatus(req, res) {
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token;
@@ -713,25 +727,41 @@ app.get('/api/submission-status', async (req, res) => {
     const locked = await isAfterCutoffTime();
 
     let existingSubmission = null;
+    let todayStatus = { submitted: false };
+
     if (memberName) {
       const todayDate = getFormattedToday();
       const draft = await dbRepo.getDailyDraft(todayDate);
-      const found = (draft.teamData || []).find(m => m.name && m.name.toUpperCase() === memberName);
+      const found = (draft.teamData || []).find(m => m.name && m.name.toUpperCase().trim() === memberName);
       if (found) {
+        const hasTasks = Array.isArray(found.projects) && found.projects.some(p => Array.isArray(p.tasks) && p.tasks.length > 0);
+        const hasNote = Boolean(found.note && found.note.trim());
+        const isSubmitted = hasTasks || hasNote;
+
         let rawText = '';
         (found.projects || []).forEach(p => {
-          rawText += `${p.name}\n`;
+          rawText += `${p.name}:-\n`;
           (p.tasks || []).forEach(t => {
-            rawText += `${t.text} => ${t.status || 'Done'}\n`;
+            const tText = typeof t === 'string' ? t : (t.text || '');
+            const tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
+            rawText += `${tText} => ${tStatus}\n`;
           });
           rawText += '\n';
         });
+
         existingSubmission = {
           member: found.name,
           role: found.role || '',
           note: found.note || '',
           projects: found.projects || [],
           rawText: rawText.trim(),
+          attachments: Array.isArray(found.attachments) ? found.attachments : []
+        };
+
+        todayStatus = {
+          submitted: isSubmitted,
+          note: found.note || '',
+          projects: found.projects || [],
           attachments: Array.isArray(found.attachments) ? found.attachments : []
         };
       }
@@ -741,12 +771,16 @@ app.get('/api/submission-status', async (req, res) => {
       success: true,
       isLocked: locked,
       cutoffTime: cutoffTime,
-      existingSubmission: existingSubmission
+      existingSubmission: existingSubmission,
+      todayStatus: todayStatus
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+}
+
+app.get('/api/submission-status', getMemberSubmissionStatus);
+app.get('/api/user-status', getMemberSubmissionStatus);
 
 // Member Direct Submission API from /submit
 app.post('/api/submit-task', async (req, res) => {
@@ -795,30 +829,77 @@ app.post('/api/submit-task', async (req, res) => {
     function parseRawMemberInput(rawText, defaultProjectName = 'General Tasks') {
       if (!rawText || !rawText.trim()) return [];
 
-      const trimmed = rawText.trim();
-      const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      if (rawLines.length === 0) return [];
+      const KNOWN_PROJECTS = [
+        'RankMyTrip',
+        'FirstText App',
+        'Crystal Wish app',
+        'Crystal Wish',
+        "Happy Reward's Dashboard Application",
+        'Happy Rewards Dashboard',
+        'Happy Reward Shopify',
+        'SEC EDGAR Terminal',
+        'AI-powered SEO/marketing platform',
+        'Alarm App',
+        'AI Life Mentor',
+        'QA & Testing',
+        'General Tasks',
+        'ReplyDM',
+        'Second Number App',
+        'Sweet Santa App',
+        'BeForever app'
+      ];
 
-      const projList = [];
-      let currentProject = null;
+      function isKnownProjectName(str) {
+        if (!str) return false;
+        const clean = str.trim().toLowerCase();
+        return KNOWN_PROJECTS.some(p => p.toLowerCase() === clean);
+      }
 
-      function isTaskLine(line) {
-        if (/[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
+      function isExplicitTask(line) {
+        if (/^[-•*#\d\.\)\s]+[a-zA-Z]/.test(line)) return true;
+        if (/[-—–=>:]+\s*(done|completed|complete|finished|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
         if (/\b(DONE|WIP)\b/i.test(line)) return true;
-        if (/^[-•*#\d\.\)\s]+/.test(line) && /^[-•*#\d\.\)]+\s*[a-zA-Z]/.test(line)) return true;
+        if (/^(validate|validating|test|testing|start|starting|create|creating|fix|fixing|fixed|update|updating|updated|implement|implementing|implemented|build|building|deploy|deploying|do|doing|check|checking|checked|add|adding|added|modify|modifying|research|meeting|call|worked|work|working|review|resolved|recheck|design|developed|setup|configure)/i.test(line)) return true;
+        if (line.length > 60) return true;
+        return false;
+      }
+
+      function isProjectHeader(line, index, totalLines) {
+        if (isExplicitTask(line)) return false;
+
+        // Explicit project header ending with :- or : e.g. "ReplyDM:-", "RankMyTrip:"
+        if (/^.{2,55}[:-]+$/.test(line)) return true;
+
+        // Markdown header / bracket format e.g. "## ReplyDM", "[ReplyDM]", "Project: ReplyDM"
+        if (/^#+\s+/.test(line) || /^\[.+\]$/.test(line) || /^project\s*:\s*.+/i.test(line)) return true;
+
+        // Known project name
+        const clean = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
+        if (isKnownProjectName(clean)) return true;
+
+        // First line if short and multiple lines exist
+        if (index === 0 && totalLines > 1 && line.length <= 40 && !isExplicitTask(line)) return true;
+
         return false;
       }
 
       function cleanTaskLine(line) {
         let clean = line.replace(/^[-•*#]+\s*/, '').replace(/^\d+[\.\)]\s*/, '').trim();
-        let status = 'Done';
+        let status = 'Done'; // Default to Done when status omitted
 
-        if (/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i.test(clean) || /\bWIP\b\s*$/i.test(clean)) {
+        const wipRegex = /[-—–=>:\s\(\[]+(wip|in\s*progress|working|in-progress|pending)[\)\]]*\s*$/i;
+        const doneRegex = /[-—–=>:\s\(\[]+(done|completed|complete|finished|closed)[\)\]]*\s*$/i;
+        const leaveRegex = /[-—–=>:\s\(\[]+(on\s*half\s*day|half\s*day|on\s*leave)[\)\]]*\s*$/i;
+
+        if (wipRegex.test(clean)) {
           status = 'WIP';
-          clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i, '').replace(/\bWIP\b\s*$/i, '').trim();
-        } else if (/[-—–=>:]+\s*(done|completed|complete)\s*$/i.test(clean) || /\b(DONE|Done)\b\s*$/i.test(clean)) {
+          clean = clean.replace(wipRegex, '').trim();
+        } else if (doneRegex.test(clean)) {
           status = 'Done';
-          clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)\s*$/i, '').replace(/\b(DONE|Done)\b\s*$/i, '').trim();
+          clean = clean.replace(doneRegex, '').trim();
+        } else if (leaveRegex.test(clean)) {
+          status = 'On Leave';
+          clean = clean.replace(leaveRegex, '').trim();
         }
 
         clean = clean.replace(/[-—–=>:]+$/, '').trim();
@@ -826,17 +907,26 @@ app.post('/api/submit-task', async (req, res) => {
       }
 
       function cleanProjectName(line) {
-        return line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').replace(/\s*General Tasks\s*$/i, '').trim();
+        return line.replace(/^#+\s*/, '')
+                   .replace(/^project\s*:\s*/i, '')
+                   .replace(/^\[|\]$/g, '')
+                   .replace(/^[-•*#]+\s*/, '')
+                   .replace(/[:-]+$/, '')
+                   .replace(/\s*General Tasks\s*$/i, '')
+                   .trim();
       }
+
+      const trimmed = rawText.trim();
+      const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (rawLines.length === 0) return [];
+
+      const projList = [];
+      let currentProject = null;
 
       for (let i = 0; i < rawLines.length; i++) {
         const line = rawLines[i];
-        const isExplicitHeader = /[:-]+$/.test(line) && !isTaskLine(line);
-        const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
 
-        const isProjHeader = isExplicitHeader || (!hasStatus && !/^[-•*]\s*[a-zA-Z0-9]/.test(line) && line.length < 80 && (i === 0 || !isTaskLine(line)));
-
-        if (isProjHeader) {
+        if (isProjectHeader(line, i, rawLines.length)) {
           const pName = cleanProjectName(line) || defaultProjectName;
           currentProject = { name: pName, tasks: [] };
           projList.push(currentProject);
@@ -1276,17 +1366,18 @@ app.post('/api/push/unsubscribe', async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// Auto-Reminder & Auto-Dispatch Background Logic
+// Auto-Reminder & Auto-Dispatch Background Logic (Asia/Kolkata Timezone, Mon-Fri)
 // -----------------------------------------------------------------------------
 let lastDispatchedDate = '';
 let last6pmReminderDate = '';
+let last620pmReminderDate = '';
 let lastAutoLeaveDate = '';
 
 async function check6pmEmployeeReminder() {
   try {
     const config = await dbRepo.getConfig();
     const targetReminderTime = config.employeeReminderTime || '18:00';
-    const cutoffTime = config.reminderTime || '18:15';
+    const cutoffTime = config.reminderTime || '18:30';
     const cutoffStr = formatTimeDisplay(cutoffTime);
 
     const now = new Date();
@@ -1322,6 +1413,50 @@ async function check6pmEmployeeReminder() {
     }
   } catch (err) {
     console.error('Error in employee reminder cron:', err.message);
+  }
+}
+
+// 6:20 PM Reminder ONLY for employees who have NOT submitted tasks today
+async function check620pmPendingReminder() {
+  try {
+    const config = await dbRepo.getConfig();
+    const cutoffTime = config.reminderTime || '18:30';
+    const cutoffStr = formatTimeDisplay(cutoffTime);
+
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const weekdayStr = parts.find(p => p.type === 'weekday')?.value || '';
+    const hour = parts.find(p => p.type === 'hour')?.value || '';
+    const minute = parts.find(p => p.type === 'minute')?.value || '';
+    const timeStr = `${hour}:${minute}`;
+    const todayDate = getFormattedToday();
+
+    const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
+    const targetPendingTime = '18:20';
+
+    if (isWorkingDay && timeStr === targetPendingTime && last620pmReminderDate !== todayDate) {
+      last620pmReminderDate = todayDate;
+      console.log(`⏰ [Auto-Cron] Triggering ${targetPendingTime} (Mon-Fri) Urgent Reminder to PENDING Employees only...`);
+      sendPushToEmployees({
+        title: `⏰ Urgent Reminder: Task Update Pending (${formatTimeDisplay(targetPendingTime)})`,
+        body: `Reminder: You have not submitted your task update for today yet. Please submit now before the ${cutoffStr} cutoff!`,
+        url: '/submit',
+        tag: 'employee-pending-reminder'
+      }, { onlyPendingToday: true }).then(count => {
+        console.log(`🔔 [Auto-Cron] ${targetPendingTime} pending reminder dispatched to ${count} pending employee device(s).`);
+      }).catch(err => {
+        console.error('Error dispatching pending push reminder:', err.message);
+      });
+    }
+  } catch (err) {
+    console.error('Error in pending reminder cron:', err.message);
   }
 }
 
@@ -1382,7 +1517,7 @@ function buildFormattedOutput(draft) {
           if (t.status === 'Done') output += `• ${tText} => Done\n`;
           else if (t.status === 'WIP') output += `• ${tText} => WIP\n`;
           else if (t.status === 'In Progress') output += `• ${tText} : In-progress\n`;
-          else output += `• ${tText}\n`;
+          else output += `• ${tText} => Done\n`;
         });
         output += `\n`;
       });
@@ -1400,14 +1535,24 @@ async function checkAndAutoDispatch() {
     if (!config.autoDispatch || !config.webhookUrl) return;
 
     const now = new Date();
-    const currentHours = String(now.getHours()).padStart(2, '0');
-    const currentMinutes = String(now.getMinutes()).padStart(2, '0');
-    const currentTime = `${currentHours}:${currentMinutes}`;
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(now);
+
+    const weekdayStr = parts.find(p => p.type === 'weekday')?.value || '';
+    const hour = parts.find(p => p.type === 'hour')?.value || '';
+    const minute = parts.find(p => p.type === 'minute')?.value || '';
+    const currentTime = `${hour}:${minute}`;
     const todayStr = getFormattedToday();
 
-    const targetTime = config.reminderTime || '18:15';
+    const isWorkingDay = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
+    const targetTime = config.reminderTime || '18:30';
 
-    if (currentTime === targetTime && lastDispatchedDate !== todayStr) {
+    if (isWorkingDay && currentTime === targetTime && lastDispatchedDate !== todayStr) {
       console.log(`⏰ [Auto-Cron] Triggering ${formatTimeDisplay(targetTime)} Daily Status Auto-Dispatch...`);
       // Ensure any pending employees are marked as ON LEAVE before dispatching
       await autoMarkPendingEmployeesLeave(todayStr);
@@ -1443,15 +1588,16 @@ async function checkAndAutoDispatch() {
 // Background scheduler running every 30 seconds
 setInterval(() => {
   check6pmEmployeeReminder();
+  check620pmPendingReminder();
   check625pmAutoMarkLeave();
   checkAndAutoDispatch();
 }, 30000);
 
-// Vercel Cron Endpoint for Mon-Fri employee push reminder
+// Vercel Cron Endpoint for 6:00 PM Mon-Fri employee push reminder (All Employees)
 app.get('/api/cron-reminder', async (req, res) => {
   try {
     const config = await dbRepo.getConfig();
-    const cutoffStr = formatTimeDisplay(config.reminderTime || '18:15');
+    const cutoffStr = formatTimeDisplay(config.reminderTime || '18:30');
     const reminderStr = formatTimeDisplay(config.employeeReminderTime || '18:00');
 
     const count = await sendPushToEmployees({
@@ -1461,6 +1607,24 @@ app.get('/api/cron-reminder', async (req, res) => {
       tag: 'employee-task-reminder'
     }, { onlyPendingToday: false });
     return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} device(s)!` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Vercel Cron Endpoint for 6:20 PM Mon-Fri Urgent Push Reminder (Pending Employees Only)
+app.get('/api/cron-reminder-pending', async (req, res) => {
+  try {
+    const config = await dbRepo.getConfig();
+    const cutoffStr = formatTimeDisplay(config.reminderTime || '18:30');
+
+    const count = await sendPushToEmployees({
+      title: `⏰ Urgent Reminder: Task Update Pending (6:20 PM)`,
+      body: `Reminder: You have not submitted your task update for today yet. Please submit now before the ${cutoffStr} cutoff!`,
+      url: '/submit',
+      tag: 'employee-pending-reminder'
+    }, { onlyPendingToday: true });
+    return res.json({ success: true, message: `6:20 PM urgent reminder dispatched to ${count} pending device(s)!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

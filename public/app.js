@@ -651,30 +651,77 @@ function copyAllPasscodes() {
 function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Tasks') {
   if (!rawText || !rawText.trim()) return [];
 
-  const trimmed = rawText.trim();
-  const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  if (rawLines.length === 0) return [];
+  const KNOWN_PROJECTS = [
+    'RankMyTrip',
+    'FirstText App',
+    'Crystal Wish app',
+    'Crystal Wish',
+    "Happy Reward's Dashboard Application",
+    'Happy Rewards Dashboard',
+    'Happy Reward Shopify',
+    'SEC EDGAR Terminal',
+    'AI-powered SEO/marketing platform',
+    'Alarm App',
+    'AI Life Mentor',
+    'QA & Testing',
+    'General Tasks',
+    'ReplyDM',
+    'Second Number App',
+    'Sweet Santa App',
+    'BeForever app'
+  ];
 
-  const projList = [];
-  let currentProject = null;
+  function isKnownProjectName(str) {
+    if (!str) return false;
+    const clean = str.trim().toLowerCase();
+    return KNOWN_PROJECTS.some(p => p.toLowerCase() === clean);
+  }
 
-  function isTaskLine(line) {
-    if (/[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
+  function isExplicitTask(line) {
+    if (/^[-•*#\d\.\)\s]+[a-zA-Z]/.test(line)) return true;
+    if (/[-—–=>:]+\s*(done|completed|complete|finished|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
     if (/\b(DONE|WIP)\b/i.test(line)) return true;
-    if (/^[-•*#\d\.\)\s]+/.test(line) && /^[-•*#\d\.\)]+\s*[a-zA-Z]/.test(line)) return true;
+    if (/^(validate|validating|test|testing|start|starting|create|creating|fix|fixing|fixed|update|updating|updated|implement|implementing|implemented|build|building|deploy|deploying|do|doing|check|checking|checked|add|adding|added|modify|modifying|research|meeting|call|worked|work|working|review|resolved|recheck|design|developed|setup|configure)/i.test(line)) return true;
+    if (line.length > 60) return true;
+    return false;
+  }
+
+  function isProjectHeader(line, index, totalLines) {
+    if (isExplicitTask(line)) return false;
+
+    // Explicit project header ending with :- or : e.g. "ReplyDM:-", "RankMyTrip:"
+    if (/^.{2,55}[:-]+$/.test(line)) return true;
+
+    // Markdown header / bracket format e.g. "## ReplyDM", "[ReplyDM]", "Project: ReplyDM"
+    if (/^#+\s+/.test(line) || /^\[.+\]$/.test(line) || /^project\s*:\s*.+/i.test(line)) return true;
+
+    // Known project name
+    const clean = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
+    if (isKnownProjectName(clean)) return true;
+
+    // First line if short and multiple lines exist
+    if (index === 0 && totalLines > 1 && line.length <= 40 && !isExplicitTask(line)) return true;
+
     return false;
   }
 
   function cleanTaskLine(line) {
     let clean = line.replace(/^[-•*#]+\s*/, '').replace(/^\d+[\.\)]\s*/, '').trim();
-    let status = 'Done';
+    let status = 'Done'; // Default to Done when status omitted
 
-    if (/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i.test(clean) || /\bWIP\b\s*$/i.test(clean)) {
+    const wipRegex = /[-—–=>:\s\(\[]+(wip|in\s*progress|working|in-progress|pending)[\)\]]*\s*$/i;
+    const doneRegex = /[-—–=>:\s\(\[]+(done|completed|complete|finished|closed)[\)\]]*\s*$/i;
+    const leaveRegex = /[-—–=>:\s\(\[]+(on\s*half\s*day|half\s*day|on\s*leave)[\)\]]*\s*$/i;
+
+    if (wipRegex.test(clean)) {
       status = 'WIP';
-      clean = clean.replace(/[-—–=>:]+\s*(wip|in\s*progress|working|in-progress)\s*$/i, '').replace(/\bWIP\b\s*$/i, '').trim();
-    } else if (/[-—–=>:]+\s*(done|completed|complete)\s*$/i.test(clean) || /\b(DONE|Done)\b\s*$/i.test(clean)) {
+      clean = clean.replace(wipRegex, '').trim();
+    } else if (doneRegex.test(clean)) {
       status = 'Done';
-      clean = clean.replace(/[-—–=>:]+\s*(done|completed|complete)\s*$/i, '').replace(/\b(DONE|Done)\b\s*$/i, '').trim();
+      clean = clean.replace(doneRegex, '').trim();
+    } else if (leaveRegex.test(clean)) {
+      status = 'On Leave';
+      clean = clean.replace(leaveRegex, '').trim();
     }
 
     clean = clean.replace(/[-—–=>:]+$/, '').trim();
@@ -682,17 +729,26 @@ function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Task
   }
 
   function cleanProjectName(line) {
-    return line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').replace(/\s*General Tasks\s*$/i, '').trim();
+    return line.replace(/^#+\s*/, '')
+               .replace(/^project\s*:\s*/i, '')
+               .replace(/^\[|\]$/g, '')
+               .replace(/^[-•*#]+\s*/, '')
+               .replace(/[:-]+$/, '')
+               .replace(/\s*General Tasks\s*$/i, '')
+               .trim();
   }
+
+  const trimmed = rawText.trim();
+  const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (rawLines.length === 0) return [];
+
+  const projList = [];
+  let currentProject = null;
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
-    const isExplicitHeader = /[:-]+$/.test(line) && !isTaskLine(line);
-    const hasStatus = /[-—–=>:]+\s*(done|completed|complete|wip|in\s*progress|working)/i.test(line) || /\b(DONE|WIP)\b/i.test(line);
 
-    const isProjHeader = isExplicitHeader || (!hasStatus && !/^[-•*]\s*[a-zA-Z0-9]/.test(line) && line.length < 80 && (i === 0 || !isTaskLine(line)));
-
-    if (isProjHeader) {
+    if (isProjectHeader(line, i, rawLines.length)) {
       const pName = cleanProjectName(line) || defaultProjectName;
       currentProject = { name: pName, tasks: [] };
       projList.push(currentProject);
@@ -1065,8 +1121,9 @@ function generateFormattedOutput() {
               plainText += `• ${taskText} : In-progress\n`;
               htmlPreview += `• ${taskText} : <span style="color: #f59e0b; font-weight: 600;">In-progress</span>\n`;
             } else {
-              plainText += `• ${taskText}\n`;
-              htmlPreview += `• ${taskText}\n`;
+              totalDone++;
+              plainText += `• ${taskText} => Done\n`;
+              htmlPreview += `• ${taskText} => <span style="color: #10b981; font-weight: 600;">Done</span>\n`;
             }
           });
         }

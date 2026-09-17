@@ -920,20 +920,22 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
         });
         const data = await res.json();
 
-        if (data.todayStatus && data.todayStatus.submitted) {
-          if (attendanceSelect && data.todayStatus.note !== undefined) {
-            attendanceSelect.value = data.todayStatus.note;
+        const existing = data.existingSubmission || (data.todayStatus && data.todayStatus.submitted ? data.todayStatus : null);
+        if (existing) {
+          if (attendanceSelect && existing.note !== undefined) {
+            attendanceSelect.value = existing.note;
           }
 
-          if (data.todayStatus.attachments && Array.isArray(data.todayStatus.attachments)) {
-            attachedImages = [...data.todayStatus.attachments];
+          if (existing.attachments && Array.isArray(existing.attachments)) {
+            attachedImages = [...existing.attachments];
             renderAttachmentPreviews();
           }
 
-          if (data.todayStatus.projects && data.todayStatus.projects.length > 0) {
+          if (existing.projects && existing.projects.length > 0) {
             let bulkText = '';
-            data.todayStatus.projects.forEach(p => {
-              bulkText += `${p.name}\n`;
+            existing.projects.forEach(p => {
+              const pName = (p.name || '').replace(/[:-]+$/, '');
+              bulkText += `${pName}:-\n`;
               (p.tasks || []).forEach(t => {
                 const tText = typeof t === 'string' ? t : (t.text || '');
                 const tStatus = typeof t === 'string' ? 'Done' : (t.status || 'Done');
@@ -942,7 +944,7 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
               bulkText += '\n';
             });
             bulkTasksInput.value = bulkText.trim();
-            populateProjectCards(data.todayStatus.projects);
+            populateProjectCards(existing.projects);
           }
         }
       } catch (err) {

@@ -26,12 +26,16 @@
       "schedule": "30 12 * * 1-5"
     },
     {
+      "path": "/api/cron-reminder-pending",
+      "schedule": "50 12 * * 1-5"
+    },
+    {
       "path": "/api/cron-auto-leave",
       "schedule": "55 12 * * 1-5"
     },
     {
       "path": "/api/cron-dispatch",
-      "schedule": "58 12 * * *"
+      "schedule": "0 13 * * 1-5"
     }
   ]
 }
