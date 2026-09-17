@@ -1,5 +1,48 @@
 [
   {
+    "id": "sub-1789623695773-if01o",
+    "member": "DEVERSH",
+    "role": "Nodejs Developer",
+    "note": "",
+    "projects": [
+      {
+        "name": "SEC EDGAR Terminal",
+        "tasks": [
+          {
+            "text": "Implement Google OAuth authentication flow with trial activation and update login handling",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "Beforever",
+        "tasks": [
+          {
+            "text": "Test: iOS application with 2 user connected",
+            "status": "Done"
+          }
+        ]
+      },
+      {
+        "name": "Beforever Backend",
+        "tasks": [
+          {
+            "text": "Enhance journal entries with city and country fields",
+            "status": "WIP"
+          },
+          {
+            "text": "Add device token handling for user registration and updates",
+            "status": "Done"
+          }
+        ]
+      }
+    ],
+    "attachments": [],
+    "date": "17/09/2026",
+    "isoDate": "2026-09-17",
+    "timestamp": "2026-09-17T05:41:34.332Z"
+  },
+  {
     "id": "sub-1789621581610-qal02",
     "member": "NISARG",
     "role": "QA & Scrum Master",

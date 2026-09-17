@@ -668,7 +668,9 @@ function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Task
     'ReplyDM',
     'Second Number App',
     'Sweet Santa App',
-    'BeForever app'
+    'BeForever app',
+    'Beforever',
+    'Beforever Backend'
   ];
 
   function isKnownProjectName(str) {
@@ -677,30 +679,39 @@ function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Task
     return KNOWN_PROJECTS.some(p => p.toLowerCase() === clean);
   }
 
+  const TASK_VERB_REGEX = /^(validate|validating|validated|test|testing|tested|start|starting|started|create|creating|created|fix|fixing|fixed|update|updating|updated|implement|implementing|implemented|build|building|built|deploy|deploying|deployed|do|doing|check|checking|checked|add|adding|added|modify|modifying|modified|research|researching|meeting|call|discussion|work|working|worked|review|reviewing|reviewed|resolve|resolving|resolved|recheck|rechecking|rechecked|design|designing|designed|develop|developing|developed|setup|setting|configure|configuring|configured|integrate|integrating|integrated|debug|debugging|debugged|refactor|refactoring|refactored|enhance|enhancing|enhanced|remove|removing|removed|delete|deleting|deleted|clean|cleaning|cleaned|write|writing|wrote|read|reading|optimize|optimizing|optimized|handle|handling|handled|investigate|investigating|investigated|verify|verifying|verified|support|supporting|supported|prepare|preparing|prepared|upload|uploading|uploaded|download|downloading|downloaded|push|pushing|pushed|merge|merging|merged)/i;
+
   function isExplicitTask(line) {
+    if (!line) return false;
     if (/^[-•*#\d\.\)\s]+[a-zA-Z]/.test(line)) return true;
-    if (/[-—–=>:]+\s*(done|completed|complete|finished|wip|in\s*progress|working|in-progress)/i.test(line)) return true;
+    if (/[-—–=>:]+\s*(done|completed|complete|finished|wip|in\s*progress|working|in-progress|on\s*leave|half\s*day)/i.test(line)) return true;
     if (/\b(DONE|WIP)\b/i.test(line)) return true;
-    if (/^(validate|validating|test|testing|start|starting|create|creating|fix|fixing|fixed|update|updating|updated|implement|implementing|implemented|build|building|deploy|deploying|do|doing|check|checking|checked|add|adding|added|modify|modifying|research|meeting|call|worked|work|working|review|resolved|recheck|design|developed|setup|configure)/i.test(line)) return true;
-    if (line.length > 60) return true;
+    if (TASK_VERB_REGEX.test(line)) return true;
+    if (line.length > 55) return true;
     return false;
   }
 
-  function isProjectHeader(line, index, totalLines) {
-    if (isExplicitTask(line)) return false;
+  function isProjectHeader(line, index, linesArray) {
+    if (!line || !line.trim()) return false;
+    const trimmed = line.trim();
 
-    // Explicit project header ending with :- or : e.g. "ReplyDM:-", "RankMyTrip:"
-    if (/^.{2,55}[:-]+$/.test(line)) return true;
+    if (isExplicitTask(trimmed)) return false;
 
-    // Markdown header / bracket format e.g. "## ReplyDM", "[ReplyDM]", "Project: ReplyDM"
-    if (/^#+\s+/.test(line) || /^\[.+\]$/.test(line) || /^project\s*:\s*.+/i.test(line)) return true;
+    // Explicit project header ending with :- or : e.g. "ReplyDM:-", "RankMyTrip:", "Beforever Backend:-"
+    if (/^.{2,55}[:-]+$/.test(trimmed)) return true;
+
+    // Markdown header / bracket format e.g. "## ReplyDM", "[ReplyDM]", "Project: ReplyDM", "**ReplyDM**"
+    if (/^#+\s+/.test(trimmed) || /^\[.+\]$/.test(trimmed) || /^project\s*:\s*.+/i.test(trimmed) || /^\*\*[^*]+\*\*:?$/.test(trimmed)) return true;
 
     // Known project name
-    const clean = line.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
+    const clean = trimmed.replace(/^[-•*#]+\s*/, '').replace(/[:-]+$/, '').trim();
     if (isKnownProjectName(clean)) return true;
 
-    // First line if short and multiple lines exist
-    if (index === 0 && totalLines > 1 && line.length <= 40 && !isExplicitTask(line)) return true;
+    // Short title line (<= 45 chars) that does not match task action verbs
+    if (trimmed.length <= 45 && !TASK_VERB_REGEX.test(trimmed)) {
+      if (index === 0 && linesArray.length > 1) return true;
+      if (index > 0 && linesArray[index - 1] === '') return true;
+    }
 
     return false;
   }
@@ -732,23 +743,22 @@ function parseMemberProjectsAndTasks(rawText, defaultProjectName = 'General Task
     return line.replace(/^#+\s*/, '')
                .replace(/^project\s*:\s*/i, '')
                .replace(/^\[|\]$/g, '')
+               .replace(/^\*\*|\*\*$/g, '')
                .replace(/^[-•*#]+\s*/, '')
                .replace(/[:-]+$/, '')
                .replace(/\s*General Tasks\s*$/i, '')
                .trim();
   }
 
-  const trimmed = rawText.trim();
-  const rawLines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  if (rawLines.length === 0) return [];
-
+  const allLines = rawText.split('\n').map(l => l.trim());
   const projList = [];
   let currentProject = null;
 
-  for (let i = 0; i < rawLines.length; i++) {
-    const line = rawLines[i];
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    if (!line) continue;
 
-    if (isProjectHeader(line, i, rawLines.length)) {
+    if (isProjectHeader(line, i, allLines)) {
       const pName = cleanProjectName(line) || defaultProjectName;
       currentProject = { name: pName, tasks: [] };
       projList.push(currentProject);
@@ -995,7 +1005,21 @@ function isLikelyMember(str) {
   const clean = str.trim().toUpperCase();
   const nonMembers = ['RESPECTED', 'ALL', 'DATE', 'NOTE', 'TODAY', 'PROJECT', 'TASK'];
   if (nonMembers.includes(clean)) return false;
-  return clean.length >= 2 && clean.length <= 40;
+
+  const isRoster = DEFAULT_TEAM_ROSTER.some(m => {
+    const mName = m.name.toUpperCase();
+    return clean === mName || clean.startsWith(mName + '(') || clean.startsWith(mName + ' ');
+  });
+  if (isRoster) return true;
+
+  // Project names or task words are NOT members
+  const knownProjects = ['RANKMYTRIP', 'FIRSTTEXT', 'CRYSTAL WISH', 'HAPPY REWARD', 'SEC EDGAR', 'BEFOREVER', 'ALARM', 'AI LIFE', 'QA & TESTING', 'REPLYDM', 'SECOND NUMBER', 'SWEET SANTA'];
+  if (knownProjects.some(p => clean.includes(p))) return false;
+
+  const taskVerbs = /^(VALIDATE|TEST|START|CREATE|FIX|UPDATE|IMPLEMENT|BUILD|DEPLOY|DO|CHECK|ADD|MODIFY|RESEARCH|MEETING|CALL|WORK|REVIEW|RESOLVE|DESIGN|SETUP|CONFIGURE|ENHANCE)/;
+  if (taskVerbs.test(clean)) return false;
+
+  return clean.length >= 2 && clean.length <= 30;
 }
 
 function isLikelyTask(str) {
