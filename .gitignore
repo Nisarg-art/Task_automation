@@ -1,7 +1,18 @@
+# Dependencies
 node_modules/
-.DS_Store
+
+# Environment variables & secrets
 .env
-.vercel
-data/*.json
-data/firebase_service_account.json
 .env*
+data/firebase_service_account.json
+
+# Local runtime data & logs
+data/*.json
+*.log
+
+# Vercel & Build outputs
+.vercel/
+
+# OS metadata
+.DS_Store
+Thumbs.db
