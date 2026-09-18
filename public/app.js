@@ -2938,3 +2938,210 @@ async function toggleAdminPushSubscription() {
   }
 }
 
+// =============================================================================
+// AI Scrum Assistant Frontend Client
+// =============================================================================
+
+function renderAiMarkdown(text) {
+  if (!text) return '';
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Headings
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h2>$1</h2>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*\*(.*?)\*\*\*/gim, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+  html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+
+  // Horizontal rules
+  html = html.replace(/^---$/gim, '<hr>');
+
+  // Bullet points
+  html = html.replace(/^\s*•\s+(.*$)/gim, '<div style="display:flex;align-items:flex-start;gap:6px;margin:2px 0 4px 6px;"><span>•</span><div>$1</div></div>');
+  html = html.replace(/^\s*↳\s+(.*$)/gim, '<div style="margin-left:18px;color:#93c5fd;font-size:0.82rem;">↳ $1</div>');
+
+  // Line breaks
+  html = html.replace(/\n\n/g, '<div style="height:6px;"></div>');
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
+
+function initAiAssistant() {
+  const btnOpenAiAssistant = document.getElementById('btnOpenAiAssistant');
+  const btnFloatingAi = document.getElementById('btnFloatingAi');
+  const aiAssistantModal = document.getElementById('aiAssistantModal');
+  const btnCloseAiModal = document.getElementById('btnCloseAiModal');
+  const aiChatForm = document.getElementById('aiChatForm');
+  const aiChatInput = document.getElementById('aiChatInput');
+  const aiChatMessages = document.getElementById('aiChatMessages');
+  const aiQuickChips = document.getElementById('aiQuickChips');
+  const btnClearAiChat = document.getElementById('btnClearAiChat');
+
+  if (!aiAssistantModal) return;
+
+  function openAiModal() {
+    aiAssistantModal.classList.remove('hidden');
+    setTimeout(() => {
+      if (aiChatInput) aiChatInput.focus();
+    }, 150);
+  }
+
+  function closeAiModal() {
+    aiAssistantModal.classList.add('hidden');
+  }
+
+  if (btnOpenAiAssistant) btnOpenAiAssistant.addEventListener('click', openAiModal);
+  if (btnFloatingAi) btnFloatingAi.addEventListener('click', openAiModal);
+  if (btnCloseAiModal) btnCloseAiModal.addEventListener('click', closeAiModal);
+
+  // Close on outside backdrop click
+  aiAssistantModal.addEventListener('click', (e) => {
+    if (e.target === aiAssistantModal) closeAiModal();
+  });
+
+  // Handle Quick Chips
+  if (aiQuickChips) {
+    aiQuickChips.addEventListener('click', (e) => {
+      const chip = e.target.closest('.ai-chip');
+      if (chip) {
+        const prompt = chip.getAttribute('data-prompt');
+        if (prompt && aiChatInput) {
+          aiChatInput.value = prompt;
+          submitAiQuery(prompt);
+        }
+      }
+    });
+  }
+
+  // Handle Clear Chat
+  if (btnClearAiChat) {
+    btnClearAiChat.addEventListener('click', () => {
+      aiChatMessages.innerHTML = `
+        <div class="ai-message ai-bot-message">
+          <div class="ai-msg-avatar">✨</div>
+          <div class="ai-msg-bubble">
+            <div class="ai-msg-text">
+              👋 Conversation cleared! Ask me anything about your team's daily status updates, members, or projects.
+            </div>
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  // Submit Query
+  async function submitAiQuery(userText) {
+    const q = (userText || (aiChatInput ? aiChatInput.value : '')).trim();
+    if (!q) return;
+
+    if (aiChatInput) aiChatInput.value = '';
+
+    // Append User Message Bubble
+    const userMsgEl = document.createElement('div');
+    userMsgEl.className = 'ai-message ai-user-message';
+    userMsgEl.innerHTML = `
+      <div class="ai-msg-avatar">👤</div>
+      <div class="ai-msg-bubble">
+        <div class="ai-msg-text">${q.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+      </div>
+    `;
+    aiChatMessages.appendChild(userMsgEl);
+
+    // Append Typing Indicator Bubble
+    const typingId = 'typing-' + Date.now();
+    const typingEl = document.createElement('div');
+    typingEl.className = 'ai-message ai-bot-message';
+    typingEl.id = typingId;
+    typingEl.innerHTML = `
+      <div class="ai-msg-avatar">✨</div>
+      <div class="ai-msg-bubble">
+        <div class="ai-typing-indicator">
+          <span class="ai-dot"></span>
+          <span class="ai-dot"></span>
+          <span class="ai-dot"></span>
+        </div>
+      </div>
+    `;
+    aiChatMessages.appendChild(typingEl);
+    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+
+    try {
+      const res = await fetch('/api/ai-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q })
+      });
+      const data = await res.json();
+
+      const typingTarget = document.getElementById(typingId);
+      if (typingTarget) typingTarget.remove();
+
+      const answerText = data.answer || 'Sorry, I could not process your question.';
+      const renderedHtml = renderAiMarkdown(answerText);
+
+      const botMsgEl = document.createElement('div');
+      botMsgEl.className = 'ai-message ai-bot-message';
+      botMsgEl.innerHTML = `
+        <div class="ai-msg-avatar">✨</div>
+        <div class="ai-msg-bubble">
+          <div class="ai-msg-text">${renderedHtml}</div>
+          <div class="ai-msg-actions">
+            <button type="button" class="ai-btn-copy" title="Copy answer to clipboard">📋 Copy</button>
+          </div>
+        </div>
+      `;
+
+      // Copy Button Handler
+      const copyBtn = botMsgEl.querySelector('.ai-btn-copy');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(answerText).then(() => {
+            copyBtn.textContent = '✓ Copied!';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 2000);
+          }).catch(() => {
+            showToast('Could not copy text', 'error');
+          });
+        });
+      }
+
+      aiChatMessages.appendChild(botMsgEl);
+      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+    } catch (err) {
+      const typingTarget = document.getElementById(typingId);
+      if (typingTarget) typingTarget.remove();
+
+      const errorMsgEl = document.createElement('div');
+      errorMsgEl.className = 'ai-message ai-bot-message';
+      errorMsgEl.innerHTML = `
+        <div class="ai-msg-avatar">⚠️</div>
+        <div class="ai-msg-bubble" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);">
+          <div class="ai-msg-text" style="color: #fca5a5;">
+            An error occurred while querying the AI assistant: ${err.message}
+          </div>
+        </div>
+      `;
+      aiChatMessages.appendChild(errorMsgEl);
+      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+    }
+  }
+
+  if (aiChatForm) {
+    aiChatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submitAiQuery();
+    });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initAiAssistant();
+});
+

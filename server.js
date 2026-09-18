@@ -9,6 +9,7 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 
 const dbRepo = require('./db');
+const aiAssistant = require('./aiAssistant');
 
 const app = express();
 const PORT = process.env.PORT || 3050;
@@ -1792,6 +1793,18 @@ app.get('/api/admin/request-logs', async (req, res) => {
     const logs = await dbRepo.getRequestLogs(limit);
     return res.json({ success: true, count: logs.length, logs });
   } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// AI Assistant Query Endpoint
+app.post('/api/ai-assistant', async (req, res) => {
+  try {
+    const { query, options } = req.body;
+    const result = await aiAssistant.handleAiQuery(query, options);
+    return res.json(result);
+  } catch (err) {
+    console.error('AI Assistant Error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

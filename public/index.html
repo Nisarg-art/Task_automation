@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=2.8">
+  <link rel="stylesheet" href="styles.css?v=3.0">
 </head>
 <body class="dark-mode">
   <div class="app-container">
@@ -48,6 +48,12 @@
         <button id="btnAdminPushToggle" class="btn btn-secondary" title="Enable instant push alerts on this device when employees submit tasks">
           <span id="adminPushIcon">🔔</span>
           <span id="adminPushText">Push Alerts</span>
+        </button>
+
+        <!-- AI Assistant Button -->
+        <button id="btnOpenAiAssistant" class="btn btn-secondary btn-ai-sparkle" title="Ask AI Assistant about any date or employee's task report">
+          <span class="ai-sparkle-icon">✨</span>
+          <span>AI Assistant</span>
         </button>
 
         <!-- Webhook Config Button -->
@@ -603,6 +609,91 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
     </div>
   </div>
 
+  <!-- AI Assistant Modal Dialog -->
+  <div id="aiAssistantModal" class="modal-backdrop hidden" style="z-index: 99998;">
+    <div class="modal-card ai-modal-card">
+      <div class="modal-header ai-modal-header">
+        <div class="modal-title-wrap" style="display: flex; align-items: center; gap: 10px;">
+          <div class="ai-avatar-badge">
+            ✨
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.18rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+              <span>Scrum AI Assistant</span>
+              <span class="ai-badge-pill">Local Intelligence</span>
+            </h3>
+            <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 2px;">
+              Ask anything about employee task updates, historical dates, or project progress.
+            </div>
+          </div>
+        </div>
+        <button type="button" id="btnCloseAiModal" class="btn-close" style="font-size: 1.4rem;">&times;</button>
+      </div>
+
+      <div class="modal-body ai-modal-body">
+        <!-- Quick Prompt Chips -->
+        <div class="ai-chips-wrapper">
+          <div class="ai-chips-label">Quick Suggestions:</div>
+          <div class="ai-chips-container" id="aiQuickChips">
+            <button type="button" class="ai-chip" data-prompt="I want 16th sept update of Pranav">
+              ⚡ Pranav on 16th Sept
+            </button>
+            <button type="button" class="ai-chip" data-prompt="What did Harshad work on 17th Sept?">
+              📋 Harshad on 17th Sept
+            </button>
+            <button type="button" class="ai-chip" data-prompt="Show all updates of Deversh">
+              👤 Deversh's Recent Tasks
+            </button>
+            <button type="button" class="ai-chip" data-prompt="Show team summary for 16/09/2026">
+              📊 Team Report 16th Sept
+            </button>
+            <button type="button" class="ai-chip" data-prompt="Who worked on Happy Reward?">
+              🔍 Project "Happy Reward"
+            </button>
+          </div>
+        </div>
+
+        <!-- Chat Conversation Area -->
+        <div id="aiChatMessages" class="ai-chat-messages">
+          <div class="ai-message ai-bot-message">
+            <div class="ai-msg-avatar">✨</div>
+            <div class="ai-msg-bubble">
+              <div class="ai-msg-text">
+                👋 Hello! I am your <strong>Scrum Task AI Assistant</strong>.<br>
+                You can ask me questions like:
+                <ul style="margin: 6px 0 0 16px; padding: 0; line-height: 1.5; font-size: 0.86rem; color: #cbd5e1;">
+                  <li><em>"I want 16th sept update of Pranav"</em></li>
+                  <li><em>"What did Harshad do on 17th Sept?"</em></li>
+                  <li><em>"Show all recent updates for Kartik"</em></li>
+                  <li><em>"Give me team status summary for 16/09/2026"</em></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer ai-modal-footer">
+        <form id="aiChatForm" class="ai-chat-input-form" onsubmit="return false;">
+          <input type="text" id="aiChatInput" class="ai-chat-input" placeholder="Type your question (e.g. 'i want 16th sept update of pranav')..." autocomplete="off">
+          <button type="submit" id="btnSendAiQuery" class="btn btn-primary ai-send-btn" title="Send Question">
+            <span>Ask AI</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+          <button type="button" id="btnClearAiChat" class="btn btn-secondary ai-clear-btn" title="Clear Conversation">
+            Clear
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating AI Assistant Launcher FAB -->
+  <button id="btnFloatingAi" class="floating-ai-fab" title="Open AI Scrum Assistant">
+    <span class="ai-fab-icon">✨</span>
+    <span class="ai-fab-text">Ask AI</span>
+  </button>
+
   <!-- Toast Notification -->
   <div id="toast" class="toast hidden">
     <div class="toast-content">
@@ -615,6 +706,6 @@ Drive History G-Force Distribution Screen UI => WIP"></textarea>
   <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
 
-  <script src="app.js?v=2.8"></script>
+  <script src="app.js?v=3.0"></script>
 </body>
 </html>
