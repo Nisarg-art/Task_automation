@@ -164,6 +164,22 @@ async function initDatabaseTables() {
       );
     `;
 
+    await sqlClient`
+      CREATE TABLE IF NOT EXISTS request_logs (
+        id TEXT PRIMARY KEY,
+        ip TEXT,
+        user_agent TEXT,
+        method TEXT,
+        path TEXT,
+        headers JSONB,
+        request_body JSONB,
+        status_code INTEGER,
+        response_body TEXT,
+        duration_ms INTEGER,
+        timestamp TEXT
+      );
+    `;
+
     // Seed default users if table is empty
     const existingUsers = await db.select().from(schema.users).limit(1);
     if (existingUsers.length === 0) {
@@ -219,6 +235,7 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const PUSH_SUBS_FILE = path.join(DATA_DIR, 'push_subscriptions.json');
 const VAPID_FILE = path.join(DATA_DIR, 'vapid_keys.json');
+const REQUEST_LOGS_FILE = path.join(DATA_DIR, 'request_logs.json');
 
 function ensureLocalDir() {
   try {
@@ -687,25 +704,49 @@ async function getPushSubscriptions() {
 }
 
 async function savePushSubscription(subRecord) {
+  const endpointVal = subRecord.subscription?.endpoint || subRecord.endpoint || null;
+  const fcmTokenVal = subRecord.fcmToken || null;
+  const memberVal = (subRecord.member || '').toUpperCase().trim();
+  const roleVal = subRecord.role || 'employee';
+
   if (isDbConnected && db) {
     try {
+      // Look for existing subscription by endpoint or fcmToken
+      let existingId = null;
+      if (fcmTokenVal) {
+        const rows = await db.select({ id: schema.pushSubscriptions.id })
+          .from(schema.pushSubscriptions)
+          .where(eq(schema.pushSubscriptions.fcmToken, fcmTokenVal))
+          .limit(1);
+        if (rows.length > 0) existingId = rows[0].id;
+      }
+      if (!existingId && endpointVal) {
+        const rows = await db.select({ id: schema.pushSubscriptions.id })
+          .from(schema.pushSubscriptions)
+          .where(eq(schema.pushSubscriptions.endpoint, endpointVal))
+          .limit(1);
+        if (rows.length > 0) existingId = rows[0].id;
+      }
+
+      const recId = existingId || subRecord.id || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+
       await db.insert(schema.pushSubscriptions).values({
-        id: subRecord.id || `sub_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        type: subRecord.type || (subRecord.fcmToken ? 'fcm' : 'webpush'),
-        endpoint: subRecord.subscription?.endpoint || subRecord.endpoint || null,
+        id: recId,
+        type: subRecord.type || (fcmTokenVal ? 'fcm' : 'webpush'),
+        endpoint: endpointVal,
         keys: subRecord.subscription?.keys || subRecord.keys || null,
-        fcmToken: subRecord.fcmToken || null,
-        role: subRecord.role || 'employee',
-        member: subRecord.member || '',
+        fcmToken: fcmTokenVal,
+        role: roleVal,
+        member: memberVal,
         updatedAt: new Date().toISOString(),
       }).onConflictDoUpdate({
         target: schema.pushSubscriptions.id,
         set: {
-          endpoint: subRecord.subscription?.endpoint || subRecord.endpoint || null,
+          endpoint: endpointVal,
           keys: subRecord.subscription?.keys || subRecord.keys || null,
-          fcmToken: subRecord.fcmToken || null,
-          role: subRecord.role || 'employee',
-          member: subRecord.member || '',
+          fcmToken: fcmTokenVal,
+          role: roleVal,
+          member: memberVal,
           updatedAt: new Date().toISOString(),
         }
       });
@@ -805,6 +846,81 @@ async function saveVapidKeys(keys) {
   } catch (e) { }
 }
 
+// --- REQUEST & RESPONSE LOGS ---
+async function addRequestLog(logEntry) {
+  const entry = {
+    id: logEntry.id || `req-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    ip: logEntry.ip || '',
+    userAgent: logEntry.userAgent || '',
+    method: logEntry.method || 'GET',
+    path: logEntry.path || '',
+    headers: logEntry.headers || {},
+    requestBody: logEntry.requestBody || null,
+    statusCode: logEntry.statusCode || 200,
+    responseBody: typeof logEntry.responseBody === 'string' ? logEntry.responseBody : JSON.stringify(logEntry.responseBody || ''),
+    durationMs: logEntry.durationMs || 0,
+    timestamp: logEntry.timestamp || new Date().toISOString(),
+  };
+
+  if (isDbConnected && db) {
+    try {
+      await db.insert(schema.requestLogs).values({
+        id: entry.id,
+        ip: entry.ip,
+        userAgent: entry.userAgent,
+        method: entry.method,
+        path: entry.path,
+        headers: entry.headers,
+        requestBody: entry.requestBody,
+        statusCode: entry.statusCode,
+        responseBody: entry.responseBody,
+        durationMs: entry.durationMs,
+        timestamp: entry.timestamp,
+      });
+      return entry;
+    } catch (e) {
+      console.error('DB error saving request log:', e.message);
+    }
+  }
+
+  ensureLocalDir();
+  try {
+    let logs = [];
+    if (fs.existsSync(REQUEST_LOGS_FILE)) {
+      logs = JSON.parse(fs.readFileSync(REQUEST_LOGS_FILE, 'utf8') || '[]');
+    }
+    logs.unshift(entry);
+    // Keep max 500 in local storage file to prevent excessive disk usage
+    if (logs.length > 500) {
+      logs = logs.slice(0, 500);
+    }
+    fs.writeFileSync(REQUEST_LOGS_FILE, JSON.stringify(logs, null, 2));
+  } catch (e) { }
+
+  return entry;
+}
+
+async function getRequestLogs(limit = 100) {
+  if (isDbConnected && db) {
+    try {
+      const rows = await db.select().from(schema.requestLogs).orderBy(desc(schema.requestLogs.timestamp)).limit(limit);
+      return rows;
+    } catch (e) {
+      console.error('DB error fetching request logs:', e.message);
+    }
+  }
+
+  ensureLocalDir();
+  try {
+    if (fs.existsSync(REQUEST_LOGS_FILE)) {
+      const logs = JSON.parse(fs.readFileSync(REQUEST_LOGS_FILE, 'utf8') || '[]');
+      return logs.slice(0, limit);
+    }
+  } catch (e) { }
+
+  return [];
+}
+
 module.exports = {
   db,
   schema,
@@ -830,4 +946,6 @@ module.exports = {
   removePushSubscription,
   getVapidKeys,
   saveVapidKeys,
+  addRequestLog,
+  getRequestLogs,
 };

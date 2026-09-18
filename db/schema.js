@@ -70,6 +70,21 @@ const vapidKeys = pgTable('vapid_keys', {
   privateKey: text('private_key').notNull(),
 });
 
+// 8. Request & Response Logs
+const requestLogs = pgTable('request_logs', {
+  id: text('id').primaryKey(),
+  ip: text('ip'),
+  userAgent: text('user_agent'),
+  method: text('method'),
+  path: text('path'),
+  headers: jsonb('headers'),
+  requestBody: jsonb('request_body'),
+  statusCode: integer('status_code'),
+  responseBody: text('response_body'),
+  durationMs: integer('duration_ms'),
+  timestamp: text('timestamp'),
+});
+
 module.exports = {
   users,
   dailyDrafts,
@@ -78,4 +93,5 @@ module.exports = {
   config,
   pushSubscriptions,
   vapidKeys,
+  requestLogs,
 };

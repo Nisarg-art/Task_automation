@@ -35,6 +35,94 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+// Request & Response Logging Middleware (Logs IP, User-Agent, Headers, Request Body, and Response to Database)
+app.use((req, res, next) => {
+  // Ignore static assets like images, icons, styles, scripts to avoid noise
+  const urlPath = req.path || '';
+  const isStatic = urlPath.match(/\.(css|js|ico|png|jpg|jpeg|svg|webp|woff|woff2|ttf|map)$/i);
+  if (isStatic) {
+    return next();
+  }
+
+  const startTime = Date.now();
+  const clientIp = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || req.ip || '').toString().split(',')[0].trim();
+  const userAgent = req.headers['user-agent'] || '';
+
+  // Intercept response body
+  let responseCapturedBody = '';
+  const originalSend = res.send;
+  const originalJson = res.json;
+
+  res.send = function (chunk) {
+    if (chunk) {
+      if (typeof chunk === 'string') {
+        responseCapturedBody = chunk.length > 2000 ? chunk.slice(0, 2000) + '... [truncated]' : chunk;
+      } else if (Buffer.isBuffer(chunk)) {
+        responseCapturedBody = `[Binary/Buffer data: ${chunk.length} bytes]`;
+      } else {
+        try {
+          const str = JSON.stringify(chunk);
+          responseCapturedBody = str.length > 2000 ? str.slice(0, 2000) + '... [truncated]' : str;
+        } catch (e) {
+          responseCapturedBody = '[Non-serializable response]';
+        }
+      }
+    }
+    return originalSend.apply(res, arguments);
+  };
+
+  res.json = function (obj) {
+    try {
+      const str = JSON.stringify(obj);
+      responseCapturedBody = str.length > 2000 ? str.slice(0, 2000) + '... [truncated]' : str;
+    } catch (e) {
+      responseCapturedBody = '[Non-serializable JSON]';
+    }
+    return originalJson.apply(res, arguments);
+  };
+
+  res.on('finish', () => {
+    const durationMs = Date.now() - startTime;
+    const sanitizedHeaders = { ...req.headers };
+    // Mask sensitive passwords if present
+    if (sanitizedHeaders.authorization) {
+      sanitizedHeaders.authorization = sanitizedHeaders.authorization.slice(0, 15) + '...';
+    }
+
+    let safeReqBody = null;
+    if (req.body && typeof req.body === 'object') {
+      try {
+        const bodyClone = JSON.parse(JSON.stringify(req.body));
+        if (bodyClone.password) bodyClone.password = '***masked***';
+        if (bodyClone.adminPassword) bodyClone.adminPassword = '***masked***';
+        safeReqBody = bodyClone;
+      } catch (e) {
+        safeReqBody = req.body;
+      }
+    }
+
+    const logEntry = {
+      ip: clientIp,
+      userAgent: userAgent,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      headers: sanitizedHeaders,
+      requestBody: safeReqBody,
+      statusCode: res.statusCode,
+      responseBody: responseCapturedBody,
+      durationMs: durationMs,
+      timestamp: new Date().toISOString()
+    };
+
+    // Store in DB asynchronously without blocking
+    dbRepo.addRequestLog(logEntry).catch(logErr => {
+      console.error('Request logging error:', logErr.message);
+    });
+  });
+
+  next();
+});
+
 // Initialize database tables & default data
 dbRepo.initDatabaseTables().catch(err => {
   console.error('Database initialization notice:', err.message);
@@ -335,16 +423,19 @@ async function sendPushToEmployees(payload, options = {}) {
       continue;
     }
 
+    const mUpper = (sub.member || '').toUpperCase().trim();
+
     // If specific targetMember is given, filter by that member
-    if (targetMember && sub.member && sub.member.toUpperCase().trim() !== targetMember) {
+    if (targetMember && mUpper !== targetMember) {
       validSubs.push(sub);
       continue;
     }
 
-    // If only pending members should receive the reminder, skip if member already submitted today
-    if (options.onlyPendingToday && sub.member) {
-      const mUpper = sub.member.toUpperCase().trim();
-      if (submittedSet.has(mUpper)) {
+    // If only pending members should receive the reminder:
+    // 1. If sub.member is mapped and member already submitted today, skip!
+    // 2. If sub.member is empty, skip unassigned subscriptions during pending reminders to prevent sending to submitted users.
+    if (options.onlyPendingToday) {
+      if (!mUpper || submittedSet.has(mUpper)) {
         validSubs.push(sub);
         continue;
       }
@@ -1409,14 +1500,14 @@ async function check6pmEmployeeReminder() {
 
     if (isWorkingDay && timeStr === targetReminderTime && last6pmReminderDate !== todayDate) {
       last6pmReminderDate = todayDate;
-      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Push Reminder to all Employees...`);
+      console.log(`⏰ [Auto-Cron] Triggering ${targetReminderTime} (Mon-Fri) Push Reminder to pending Employees...`);
       sendPushToEmployees({
         title: `⏰ Daily Task Reminder (${formatTimeDisplay(targetReminderTime)})`,
         body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
         url: '/submit',
         tag: 'employee-task-reminder'
-      }, { onlyPendingToday: false }).then(count => {
-        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} employee device(s).`);
+      }, { onlyPendingToday: true }).then(count => {
+        console.log(`🔔 [Auto-Cron] ${targetReminderTime} reminder dispatched to ${count} pending employee device(s).`);
       }).catch(err => {
         console.error('Error dispatching push reminder:', err.message);
       });
@@ -1615,8 +1706,8 @@ app.get('/api/cron-reminder', async (req, res) => {
       body: `Reminder: Please submit your daily task status report before the ${cutoffStr} cutoff!`,
       url: '/submit',
       tag: 'employee-task-reminder'
-    }, { onlyPendingToday: false });
-    return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} device(s)!` });
+    }, { onlyPendingToday: true });
+    return res.json({ success: true, message: `${reminderStr} employee push reminder dispatched to ${count} pending device(s)!` });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -1689,6 +1780,17 @@ app.get('/api/cron-dispatch', async (req, res) => {
     } else {
       return res.status(500).json({ success: false, error: await response.text() });
     }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API Endpoint to fetch latest HTTP request/response logs (admin query)
+app.get('/api/admin/request-logs', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+    const logs = await dbRepo.getRequestLogs(limit);
+    return res.json({ success: true, count: logs.length, logs });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
